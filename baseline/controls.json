@@ -1,0 +1,170 @@
+{
+  "version": "NIST SP 800-53 Rev 5",
+  "generated": "2026-03-18",
+  "publisher": "Oscar Six Security LLC",
+  "scope": "OpenClaw deployments on Ubuntu 22.04/24.04 LTS",
+  "controls": [
+    {
+      "id": "AC-2",
+      "family": "AC",
+      "name": "Account Management",
+      "status": "full",
+      "openclaw_settings": ["agents.allowlist", "channels.*.allowedUsers"],
+      "os_checks": ["getent passwd", "lastlog", "who"],
+      "remediation": "Remove unused accounts. Restrict OpenClaw allowlist to named users only."
+    },
+    {
+      "id": "AC-3",
+      "family": "AC",
+      "name": "Access Enforcement",
+      "status": "full",
+      "openclaw_settings": ["tools.fs.workspaceOnly", "agents.defaults.sandbox.mode"],
+      "os_checks": ["file permissions on ~/.openclaw/", "sudoers review"],
+      "remediation": "Set workspaceOnly=true. Set sandbox mode to all. Restrict sudoers."
+    },
+    {
+      "id": "AC-6",
+      "family": "AC",
+      "name": "Least Privilege",
+      "status": "full",
+      "openclaw_settings": ["tools.exec.elevated", "agents.defaults.sandbox.mode"],
+      "os_checks": ["sudo -l", "groups <user>"],
+      "remediation": "Disable elevated exec unless required. Confirm service account has no unnecessary group memberships."
+    },
+    {
+      "id": "AC-17",
+      "family": "AC",
+      "name": "Remote Access",
+      "status": "full",
+      "openclaw_settings": ["gateway.bind", "gateway.remote.url"],
+      "os_checks": ["ufw status", "ss -tlnp"],
+      "remediation": "Set gateway.bind to lan. Use Cloudflare Tunnel for remote access only."
+    },
+    {
+      "id": "AU-2",
+      "family": "AU",
+      "name": "Event Logging",
+      "status": "full",
+      "openclaw_settings": ["logging.level", "logging.destination"],
+      "os_checks": ["systemctl status auditd", "auditctl -l"],
+      "remediation": "Enable auditd. Set OpenClaw logging level to info or higher."
+    },
+    {
+      "id": "AU-3",
+      "family": "AU",
+      "name": "Content of Audit Records",
+      "status": "full",
+      "openclaw_settings": ["logging.includeTimestamp", "logging.includeUser"],
+      "os_checks": ["ausearch -m LOGIN", "last"],
+      "remediation": "Ensure audit records include timestamp, user, action, and outcome."
+    },
+    {
+      "id": "AU-9",
+      "family": "AU",
+      "name": "Protection of Audit Information",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["ls -la /var/log/audit/", "stat /var/log/audit/audit.log"],
+      "remediation": "Audit logs must be owned by root, mode 600. Restrict write access."
+    },
+    {
+      "id": "AU-12",
+      "family": "AU",
+      "name": "Audit Record Generation",
+      "status": "full",
+      "openclaw_settings": ["logging.auditActions"],
+      "os_checks": ["auditctl -l | grep openclaw"],
+      "remediation": "Add auditd watch rules for ~/.openclaw/secrets/ and OpenClaw config files."
+    },
+    {
+      "id": "CM-2",
+      "family": "CM",
+      "name": "Baseline Configuration",
+      "status": "full",
+      "openclaw_settings": ["*"],
+      "os_checks": ["dpkg --get-selections", "systemctl list-units --state=enabled"],
+      "remediation": "Maintain openclaw.json.baseline as the documented configuration baseline."
+    },
+    {
+      "id": "CM-6",
+      "family": "CM",
+      "name": "Configuration Settings",
+      "status": "full",
+      "openclaw_settings": ["tools.fs.workspaceOnly", "agents.defaults.sandbox.mode", "gateway.bind"],
+      "os_checks": ["ufw status verbose", "sshd -T | grep -i permit"],
+      "remediation": "Apply all settings in openclaw.json.baseline. Apply all Sarge hardening scripts."
+    },
+    {
+      "id": "CM-7",
+      "family": "CM",
+      "name": "Least Functionality",
+      "status": "full",
+      "openclaw_settings": ["plugins.enabled", "tools.enabled"],
+      "os_checks": ["systemctl list-units --state=enabled", "apt list --installed"],
+      "remediation": "Disable unused OpenClaw plugins and tools. Remove unnecessary OS packages."
+    },
+    {
+      "id": "IA-2",
+      "family": "IA",
+      "name": "Identification and Authentication (Org Users)",
+      "status": "full",
+      "openclaw_settings": ["channels.*.allowedUsers"],
+      "os_checks": ["pam_faillock status", "grep pam_faillock /etc/pam.d/common-auth"],
+      "remediation": "Enable PAM faillock. Restrict OpenClaw to authenticated Discord/channel users only."
+    },
+    {
+      "id": "IA-5",
+      "family": "IA",
+      "name": "Authenticator Management",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["grep minlen /etc/security/pwquality.conf", "grep PASS_MAX_DAYS /etc/login.defs"],
+      "remediation": "Set pwquality minlen=12, complexity rules. Set PASS_MAX_DAYS=90, PASS_MIN_DAYS=1."
+    },
+    {
+      "id": "IA-6",
+      "family": "IA",
+      "name": "Authentication Feedback",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["grep pam_unix /etc/pam.d/common-auth"],
+      "remediation": "Ensure login failure messages do not reveal whether username or password was wrong."
+    },
+    {
+      "id": "SC-8",
+      "family": "SC",
+      "name": "Transmission Confidentiality and Integrity",
+      "status": "partial",
+      "openclaw_settings": ["gateway.tls", "gateway.remote.url"],
+      "os_checks": ["ss -tlnp", "openssl s_client -connect localhost:18790"],
+      "remediation": "Enable TLS on gateway. Use Cloudflare Tunnel (TLS enforced) for all remote access."
+    },
+    {
+      "id": "SC-28",
+      "family": "SC",
+      "name": "Protection of Information at Rest",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["stat ~/.openclaw/secrets/", "ls -la ~/.openclaw/"],
+      "remediation": "Secrets directory must be 700. All secret files must be 600. Owner must be service account only."
+    },
+    {
+      "id": "SI-2",
+      "family": "SI",
+      "name": "Flaw Remediation",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["apt list --upgradable", "unattended-upgrades --dry-run"],
+      "remediation": "Enable unattended-upgrades for security patches. Review and apply pending updates."
+    },
+    {
+      "id": "SI-3",
+      "family": "SI",
+      "name": "Malicious Code Protection",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["which clamav", "systemctl status clamav-daemon"],
+      "remediation": "Install and configure ClamAV or equivalent. Schedule regular scans."
+    }
+  ]
+}

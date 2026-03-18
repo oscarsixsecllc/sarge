@@ -1,0 +1,5 @@
+# Sarge — do not commit
+*.local
+.env
+/reports/
+/snapshots/

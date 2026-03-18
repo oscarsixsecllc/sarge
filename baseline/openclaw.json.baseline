@@ -1,0 +1,61 @@
+{
+  "_comment": "Sarge Hardened OpenClaw Baseline — NIST 800-53 Rev 5",
+  "_version": "0.1.0",
+  "_publisher": "Oscar Six Security LLC",
+
+  "gateway": {
+    "bind": "lan",
+    "_bind_control": "AC-17: Remote access restricted to LAN. Use Cloudflare Tunnel for external.",
+    "port": 18790,
+    "tls": true,
+    "_tls_control": "SC-8: Transmission confidentiality via TLS"
+  },
+
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "all",
+        "_sandbox_control": "AC-3, AC-6: Least privilege enforced via full sandbox mode"
+      }
+    },
+    "allowlist": [],
+    "_allowlist_control": "AC-2: Only named, authorized users in allowlist"
+  },
+
+  "tools": {
+    "fs": {
+      "workspaceOnly": true,
+      "_workspaceOnly_control": "AC-3: Access enforcement — filesystem limited to workspace"
+    },
+    "exec": {
+      "elevated": false,
+      "_elevated_control": "AC-6: No elevated exec unless explicitly required and approved"
+    }
+  },
+
+  "logging": {
+    "level": "info",
+    "_level_control": "AU-2: Sufficient logging for security event detection",
+    "includeTimestamp": true,
+    "_timestamp_control": "AU-3: Audit records must include timestamp",
+    "includeUser": true,
+    "_user_control": "AU-3: Audit records must include user identity",
+    "auditActions": true,
+    "_auditActions_control": "AU-12: All agent actions logged"
+  },
+
+  "channels": {
+    "_note": "Restrict each channel to named allowedUsers only",
+    "_allowedUsers_control": "AC-2, IA-2: Authentication and account management"
+  },
+
+  "plugins": {
+    "_note": "Enable only required plugins — disable all others",
+    "_control": "CM-7: Least functionality — disable unused capabilities"
+  },
+
+  "memory": {
+    "encryption": true,
+    "_control": "SC-28: Protection of information at rest"
+  }
+}
