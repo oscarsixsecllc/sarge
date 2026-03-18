@@ -53,8 +53,9 @@ fi
 log "SI-7: Software integrity"
 SARGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECKSUM_FILE="$SARGE_DIR/CHECKSUMS.sha256"
+  cd "$SARGE_DIR" && 
 if [[ -f "$CHECKSUM_FILE" ]]; then
-  if sha256sum --check "$CHECKSUM_FILE" --quiet 2>/dev/null; then
+  if (cd "$SARGE_DIR" && sha256sum --check "$CHECKSUM_FILE" --quiet 2>/dev/null); then
     pass "SI-7: Sarge script checksums verified"
   else
     fail "SI-7: Sarge script checksum verification FAILED — scripts may have been modified"

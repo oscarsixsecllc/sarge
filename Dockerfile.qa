@@ -1,0 +1,31 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/New_York
+
+RUN apt-get update && apt-get install -y \
+    sudo systemd systemd-sysv \
+    ufw auditd audispd-plugins \
+    fail2ban \
+    libpam-pwquality \
+    unattended-upgrades \
+    openssh-server \
+    curl wget git \
+    python3 python3-pip \
+    lsb-release \
+    && apt-get clean
+
+# Create oscar service account (mirrors o6vm01)
+RUN useradd -m -s /bin/bash oscar && \
+    echo "oscar ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Pre-install cups and avahi to simulate a real system with unnecessary services
+RUN apt-get install -y cups avahi-daemon 2>/dev/null || true
+
+USER oscar
+WORKDIR /home/oscar
+
+# Copy Sarge into the container
+COPY --chown=oscar:oscar . /home/oscar/sarge/
+
+CMD ["/bin/bash"]
