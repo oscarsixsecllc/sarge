@@ -63,6 +63,12 @@ Full docs: [docs/quickstart.md](docs/quickstart.md)
 
 **Baseline:** NIST SP 800-53 Rev 5 | **OS:** Ubuntu 22.04 / 24.04 LTS (x86_64, arm64)
 
+> **Why SC and SI are partial:**
+> 
+> **SC (partial):** Many System & Communications Protection controls require network infrastructure decisions that vary by deployment — full boundary protection architecture, PKI certificate lifecycle, and cryptographic key management go beyond what a single-VM OpenClaw deployment can meaningfully self-assess. Sarge covers the controls that are universally applicable: transmission confidentiality (SC-8) and protection of data at rest (SC-28). Expanded SC coverage is tracked in [#1](https://github.com/oscarsixsecllc/sarge/issues/1).
+>
+> **SI (partial):** Full System & Information Integrity coverage (particularly SI-4 System Monitoring) requires a SIEM or centralized log analysis setup — a significant dependency that would narrow Sarge's applicability. Sarge covers what every deployment can implement: flaw remediation (SI-2), malware protection (SI-3), and script integrity verification (SI-7). Expanded SI coverage is tracked in [#2](https://github.com/oscarsixsecllc/sarge/issues/2).
+
 ---
 
 ## Validated Results
