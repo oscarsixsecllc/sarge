@@ -1,0 +1,48 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/New_York
+
+# Base packages
+RUN apt-get update && apt-get install -y \
+    sudo curl wget git ca-certificates gnupg \
+    ufw auditd audispd-plugins \
+    fail2ban libpam-pwquality \
+    unattended-upgrades openssh-server \
+    python3 python3-pip lsb-release \
+    systemd systemd-sysv \
+    && apt-get clean
+
+# Install Node.js 22 (required by OpenClaw)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    node --version && npm --version
+
+# Create oscar service account
+RUN useradd -m -s /bin/bash oscar && \
+    echo "oscar ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Install OpenClaw
+RUN npm install -g openclaw && openclaw --version
+
+# Unnecessary services for testing
+RUN apt-get install -y cups avahi-daemon 2>/dev/null || true
+
+# Copy Sarge
+COPY --chown=oscar:oscar . /home/oscar/sarge/
+RUN chmod +x /home/oscar/sarge/scripts/*.sh \
+    /home/oscar/sarge/assessment/assess.sh \
+    /home/oscar/sarge/assessment/checks/*.sh \
+    /home/oscar/sarge/assessment/report/report.sh \
+    /home/oscar/sarge/drift/*.sh
+
+# Set up OpenClaw config as oscar
+USER oscar
+RUN mkdir -p /home/oscar/.openclaw/secrets && \
+    chmod 700 /home/oscar/.openclaw /home/oscar/.openclaw/secrets && \
+    printf '{"gateway":{"port":18790,"mode":"local","bind":"lan","auth":{"mode":"token","token":"test-token-sarge-qa"}},"agents":{"defaults":{"sandbox":{"mode":"all"},"workspace":"/home/oscar/openclaw"}},"tools":{"fs":{"workspaceOnly":true}}}' \
+    > /home/oscar/.openclaw/openclaw.json && \
+    chmod 600 /home/oscar/.openclaw/openclaw.json
+
+WORKDIR /home/oscar
+CMD ["bash", "/home/oscar/sarge/assessment/assess.sh"]
