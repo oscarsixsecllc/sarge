@@ -1,0 +1,12 @@
+# Sarge — Code Owners
+# Changes to these paths require approval from Oscar Six Security maintainers
+
+# Core security content — requires maintainer review
+/scripts/          @oscarsixsecllc
+/assessment/       @oscarsixsecllc
+/baseline/         @oscarsixsecllc
+/drift/            @oscarsixsecllc
+/CHECKSUMS.sha256  @oscarsixsecllc
+/SKILL.md          @oscarsixsecllc
+
+# Everything else — open for community contribution
