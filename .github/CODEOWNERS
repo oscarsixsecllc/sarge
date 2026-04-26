@@ -2,11 +2,11 @@
 # Changes to these paths require approval from Oscar Six Security maintainers
 
 # Core security content — requires maintainer review
-/scripts/          @oscarsixsecllc
-/assessment/       @oscarsixsecllc
-/baseline/         @oscarsixsecllc
-/drift/            @oscarsixsecllc
-/CHECKSUMS.sha256  @oscarsixsecllc
-/SKILL.md          @oscarsixsecllc
+/scripts/          @oscarsixsecllc @keonik
+/assessment/       @oscarsixsecllc @keonik
+/baseline/         @oscarsixsecllc @keonik
+/drift/            @oscarsixsecllc @keonik
+/CHECKSUMS.sha256  @oscarsixsecllc @keonik
+/SKILL.md          @oscarsixsecllc @keonik
 
 # Everything else — open for community contribution
