@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-v0.1.1-green)](https://github.com/oscarsixsecllc/sarge/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Ubuntu%2022.04%20%7C%2024.04-orange)](docs/quickstart.md)
+[![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20macOS-orange)](docs/quickstart.md)
 
 Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool, and drift detection system designed exclusively for [OpenClaw](https://openclaw.ai) deployments.
 
@@ -61,7 +61,9 @@ Full docs: [docs/quickstart.md](docs/quickstart.md)
 | System & Information Integrity | SI | 5 | Partial |
 | **Total** | | **47** | |
 
-**Baseline:** NIST SP 800-53 Rev 5 | **OS:** Ubuntu 22.04 / 24.04 LTS (x86_64, arm64)
+**Baseline:** NIST SP 800-53 Rev 5 | **Platforms:** Ubuntu 22.04 / 24.04 LTS (full); macOS (rolling out across PRs)
+
+> **Platform support status:** Full coverage on Ubuntu 22.04 / 24.04 LTS today. macOS support is being added one module at a time so each platform's 800-53 mapping can be reviewed independently. On macOS, `scripts/install.sh` currently applies file-permission hardening only; gap analysis and drift detection refuse cleanly until their macOS-aware probes ship. Roadmap is tracked in [GitHub issues](https://github.com/oscarsixsecllc/sarge/issues).
 
 > **Why SC and SI are partial:**
 > 
@@ -83,6 +85,8 @@ On a clean Ubuntu 24.04 LTS system with Sarge hardening applied:
 | ⏭️ SKIP | 2 |
 
 The 4 remaining FAILs (auditd daemon, pam_faillock, fail2ban) require systemd and will pass on a standard Linux VM.
+
+> **macOS validation pending.** The numbers above are Ubuntu 24.04 only. macOS gap-analysis and hardening modules are landing PR-by-PR; each module will publish its own validated PASS/WARN/FAIL counts as it ships.
 
 ---
 

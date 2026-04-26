@@ -6,6 +6,20 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=../lib/platform.sh
+source "${REPO_ROOT}/lib/platform.sh"
+sarge_require_supported_os
+
+# Assessment checks are currently Ubuntu-only. macOS-aware probes ship in the
+# next PR — until then, refuse on macOS rather than emit garbage results.
+if [[ "$SARGE_OS" != "ubuntu" ]]; then
+  echo "[Sarge] Gap analysis on ${SARGE_OS_DESCRIPTION} is not yet implemented." >&2
+  echo "[Sarge] Track the rollout: https://github.com/oscarsixsecllc/sarge/issues" >&2
+  exit 2
+fi
+
 REPORT_DIR="${SARGE_REPORT_DIR:-$HOME/.sarge/reports}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_BASE="${REPORT_DIR}/sarge-report-${TIMESTAMP}"
