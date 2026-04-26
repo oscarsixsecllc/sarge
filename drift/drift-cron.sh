@@ -4,6 +4,11 @@
 set -euo pipefail
 
 SARGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
+
+# shellcheck source=../lib/platform.sh
+source "${SARGE_DIR}/lib/platform.sh"
+sarge_require_supported_os
+sarge_require_os ubuntu
 LOG_FILE="${SARGE_LOG_FILE:-$HOME/.sarge/drift.log}"
 mkdir -p "$(dirname "$LOG_FILE")"
 

@@ -1,7 +1,9 @@
 # Sarge Quickstart
 
 ## Prerequisites
-- Ubuntu 22.04 or 24.04 LTS (x86_64 or arm64)
+- One of:
+  - Ubuntu 22.04 or 24.04 LTS (x86_64 or arm64) — full coverage
+  - macOS — file-permission hardening today; assess / drift / additional hardening modules rolling out across PRs
 - OpenClaw installed
 - Git
 

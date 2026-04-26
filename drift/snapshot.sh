@@ -2,6 +2,14 @@
 # snapshot.sh — Capture Sarge Baseline Snapshot — NIST 800-53 CM-2
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=../lib/platform.sh
+source "${REPO_ROOT}/lib/platform.sh"
+sarge_require_supported_os
+sarge_require_os ubuntu
+
 SNAPSHOT_DIR="${SARGE_SNAPSHOT_DIR:-$HOME/.sarge/snapshots}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 SNAPSHOT_FILE="$SNAPSHOT_DIR/snapshot-${TIMESTAMP}.json"
