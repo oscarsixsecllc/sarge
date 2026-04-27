@@ -64,7 +64,7 @@ _sarge_is_supported_version() {
     macos)
       # Any macOS version. Apple's release cadence and year-aligned naming
       # (Sonoma 14, Sequoia 15, Tahoe 26, ...) make a tight allowlist brittle,
-      # and OpenClaw is a developer-facing surface where we want to meet users
+      # and Sarge is a developer-facing surface where we want to meet users
       # on whatever Mac they have. Tighten only if a specific version proves
       # incompatible.
       [[ -n "$SARGE_OS_VERSION" && "$SARGE_OS_VERSION" != "unknown" ]] && return 0
@@ -87,6 +87,9 @@ sarge_require_supported_os() {
 
 # Gate a script to a specific OS list. Exits 0 (clean skip) when not applicable,
 # so platform-specific modules don't break a multi-module install on other OSes.
+# The skip is silent by default — exit 0 means "intentional no-op" and we don't
+# want stderr noise in cron mail or agent transcripts. Set SARGE_VERBOSE=1 to
+# surface the skip message for debugging.
 sarge_require_os() {
   local allowed
   for allowed in "$@"; do
@@ -94,6 +97,8 @@ sarge_require_os() {
       return 0
     fi
   done
-  echo "[Sarge] Module not applicable on ${SARGE_OS} — requires: $*. Skipping." >&2
+  if [[ "${SARGE_VERBOSE:-0}" == "1" ]]; then
+    echo "[Sarge] Module not applicable on ${SARGE_OS} — requires: $*. Skipping." >&2
+  fi
   exit 0
 }
