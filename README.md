@@ -114,6 +114,25 @@ See [SECURITY.md](SECURITY.md) for vulnerability disclosure policy.
 
 ---
 
+## Script Exit Codes
+
+Sarge scripts use exit codes to signal *what they did*, not just *whether they succeeded*. The contract differs per script because each one serves a different role:
+
+| Script | Exit 0 | Exit 2 | Notes |
+|---|---|---|---|
+| `assessment/assess.sh` | Assessment ran; Markdown + JSON report generated | Platform not yet supported (no assessment performed) | **Exit 0 ≠ "your system passed."** Read the report for PASS/WARN/FAIL counts. |
+| `scripts/install.sh` | Hardening complete (or operator declined at any prompt) | Platform unsupported | Each module also prompts `[y/N]`; declining a module is exit 0 from that module. |
+| `scripts/harden-*.sh` | Module applied (or operator declined) | — | Run individually via `sudo bash scripts/harden-<name>.sh`. |
+| `drift/snapshot.sh` | Snapshot captured *or* clean skip on non-applicable platform | Platform unsupported | Designed to be safe in cron. |
+| `drift/compare.sh` | No drift detected *or* clean skip on non-applicable platform | Drift detected **or** platform unsupported | Read the script output to disambiguate. |
+| `drift/drift-cron.sh` | Success or clean skip | Platform unsupported | Wraps `compare.sh`; suitable for cron. |
+
+> **Why `assess.sh` exits 2 (not 0) on unsupported platforms.** Assessment is a *measurement* tool — exit 0 carries the meaning "I performed an assessment and produced a report." A silent exit 0 on an unsupported platform could be misread by CI pipelines as "this host has zero NIST gaps." Drift scripts use exit 0 for clean-skip because skipping is the desired behavior under cron; assess is interactive and CI-driven, where a loud failure is the correct signal.
+
+> **Verbose skip messages.** `sarge_require_os` (used by Linux-only modules to skip cleanly on macOS) is silent by default. Set `SARGE_VERBOSE=1` in the environment to see why a module skipped.
+
+---
+
 ## Repository Structure
 
 ```

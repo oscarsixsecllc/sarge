@@ -12,8 +12,11 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${REPO_ROOT}/lib/platform.sh"
 sarge_require_supported_os
 
-# Assessment checks are currently Ubuntu-only. macOS-aware probes ship in the
-# next PR — until then, refuse on macOS rather than emit garbage results.
+# Assessment checks are currently Ubuntu-only. macOS-aware probes ship in a
+# follow-up PR — until then, refuse on non-Ubuntu rather than emit garbage
+# results. Exit 2 is deliberate (not exit 0): assess is a measurement tool, so
+# a silent exit 0 could be misread by CI as "no NIST gaps found." See the
+# "Script Exit Codes" section in README.md for the full per-script contract.
 if [[ "$SARGE_OS" != "ubuntu" ]]; then
   echo "[Sarge] Gap analysis on ${SARGE_OS_DESCRIPTION} is not yet implemented." >&2
   echo "[Sarge] Track the rollout: https://github.com/oscarsixsecllc/sarge/issues" >&2
