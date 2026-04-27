@@ -138,12 +138,21 @@ ubuntu_pam_faillock_configured() {
 ubuntu_faillock_config_path() { echo "/etc/security/faillock.conf"; }
 
 # Read a value from faillock.conf (e.g. deny, unlock_time). Empty if unset.
-# Parser only handles the space-delimited form (`deny = 5`) — that's what
-# harden-pam.sh writes, so it's correct for Sarge-managed files. Tightening
-# the parser to also handle `deny=5` (no spaces) would be a behavior change
-# beyond this refactor's scope; tracked as a follow-up.
+# Handles both the space-delimited form (`deny = 5`) that harden-pam.sh writes
+# and the no-space form (`deny=5`) that operators may hand-edit. Comment lines
+# and bare-keyword settings (`silent`, `audit`) are skipped.
 ubuntu_faillock_value() {
-  grep "^$1" /etc/security/faillock.conf 2>/dev/null | awk '{ print $3 }'
+  awk -F= -v key="$1" '
+    /^[[:space:]]*#/ { next }
+    NF < 2          { next }
+    {
+      lhs = $1
+      rhs = $2
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", lhs)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", rhs)
+      if (lhs == key) { print rhs; exit }
+    }
+  ' /etc/security/faillock.conf 2>/dev/null
 }
 
 # First non-comment TMOUT line found in profile files. Empty if none.
