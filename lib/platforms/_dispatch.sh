@@ -36,6 +36,10 @@ else
 fi
 
 platform() {
+  if [[ $# -eq 0 ]]; then
+    echo "[Sarge] platform: missing probe name (usage: platform <probe> [args...])" >&2
+    return 2
+  fi
   local fn="${SARGE_OS}_$1"; shift
   if declare -F "$fn" &>/dev/null; then
     "$fn" "$@"

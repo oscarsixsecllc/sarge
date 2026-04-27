@@ -46,9 +46,11 @@ ubuntu_user_in_admin_group() { groups "$1" 2>/dev/null | grep -qw sudo; }
 
 ubuntu_firewall_command_available() { command -v ufw &>/dev/null; }
 
-# Full text of `ufw status`. Falls back through sudo / "inactive" string.
+# Full text of `ufw status`. Uses non-interactive sudo so the assessment never
+# blocks on a password prompt — falls back to plain `ufw status` (works if the
+# operator has read access) and finally the literal string "inactive".
 ubuntu_firewall_status_text() {
-  sudo ufw status 2>/dev/null || ufw status 2>/dev/null || echo "inactive"
+  sudo -n ufw status 2>/dev/null || ufw status 2>/dev/null || echo "inactive"
 }
 
 # 0 if firewall is active, nonzero otherwise.
@@ -67,9 +69,10 @@ ubuntu_port_listening() { ss -tlnp 2>/dev/null | grep -q ":$1\b"; }
 ubuntu_audit_daemon_active() { systemctl is-active --quiet auditd 2>/dev/null; }
 ubuntu_auditctl_available()  { command -v auditctl &>/dev/null; }
 
-# Full text of loaded audit rules. Tries direct then sudo.
+# Full text of loaded audit rules. Tries direct first, then non-interactive
+# sudo (no password prompt) — assessment must never hang on sudo.
 ubuntu_audit_rules() {
-  auditctl -l 2>/dev/null || sudo auditctl -l 2>/dev/null || echo ""
+  auditctl -l 2>/dev/null || sudo -n auditctl -l 2>/dev/null || echo ""
 }
 
 # Path to the primary audit log on this platform.
@@ -135,7 +138,10 @@ ubuntu_pam_faillock_configured() {
 ubuntu_faillock_config_path() { echo "/etc/security/faillock.conf"; }
 
 # Read a value from faillock.conf (e.g. deny, unlock_time). Empty if unset.
-# faillock.conf uses `name = value` with optional spaces.
+# Parser only handles the space-delimited form (`deny = 5`) — that's what
+# harden-pam.sh writes, so it's correct for Sarge-managed files. Tightening
+# the parser to also handle `deny=5` (no spaces) would be a behavior change
+# beyond this refactor's scope; tracked as a follow-up.
 ubuntu_faillock_value() {
   grep "^$1" /etc/security/faillock.conf 2>/dev/null | awk '{ print $3 }'
 }
@@ -153,9 +159,11 @@ ubuntu_clamav_installed() {
   command -v clamscan &>/dev/null || command -v clamav &>/dev/null
 }
 
-# Full text of `fail2ban-client status`. Tries direct then sudo. Empty on failure.
+# Full text of `fail2ban-client status`. Tries direct first, then non-interactive
+# sudo (no password prompt). Empty on failure — caller treats that as
+# "unavailable" rather than blocking the whole assessment.
 ubuntu_fail2ban_status() {
-  fail2ban-client status 2>/dev/null || sudo fail2ban-client status 2>/dev/null || echo ""
+  fail2ban-client status 2>/dev/null || sudo -n fail2ban-client status 2>/dev/null || echo ""
 }
 
 # 0 if the checksum file verifies against the working directory.
