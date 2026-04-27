@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # check-cm.sh — Configuration Management (CM) checks — NIST 800-53 Rev 5
+# Platform-specific data acquisition lives in lib/platforms/<os>.sh.
 
 SARGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -13,9 +14,9 @@ fi
 
 # CM-6: Unattended security upgrades
 log "CM-6: Automatic security updates"
-if dpkg -l unattended-upgrades 2>/dev/null | grep -q "^ii"; then
+if platform package_installed unattended-upgrades; then
   pass "CM-6: unattended-upgrades is installed"
-  UA_CONF="/etc/apt/apt.conf.d/50unattended-upgrades"
+  UA_CONF=$(platform unattended_upgrades_config_path)
   if [[ -f "$UA_CONF" ]] && grep -q "Unattended-Upgrade::Automatic-Reboot" "$UA_CONF" 2>/dev/null; then
     pass "CM-6: unattended-upgrades configured"
   else
@@ -27,7 +28,7 @@ fi
 
 # CM-6: Pending security updates
 log "CM-6: Pending updates"
-PENDING=$(apt list --upgradable 2>/dev/null | grep -c "upgradable" || echo 0); PENDING=$(echo "$PENDING" | head -1 | tr -d "[:space:]")
+PENDING=$(platform pending_package_updates_count)
 if [[ "$PENDING" -eq 0 ]]; then
   pass "CM-6: No pending package updates"
 elif [[ "$PENDING" -le 5 ]]; then
@@ -40,9 +41,9 @@ fi
 log "CM-7: Unnecessary services"
 RISKY_SERVICES=("telnet" "rsh" "rlogin" "vsftpd" "pure-ftpd" "proftpd" "xinetd" "cups" "avahi-daemon")
 for svc in "${RISKY_SERVICES[@]}"; do
-  if systemctl is-active --quiet "$svc" 2>/dev/null; then
+  if platform service_active "$svc"; then
     fail "CM-7: Unnecessary/risky service is running: $svc"
-  elif systemctl is-enabled --quiet "$svc" 2>/dev/null; then
+  elif platform service_enabled "$svc"; then
     warn "CM-7: Unnecessary/risky service is enabled (not running): $svc"
   else
     pass "CM-7: $svc is not active or enabled"
@@ -51,8 +52,8 @@ done
 
 # CM-7: SSH hardening
 log "CM-7: SSH configuration"
-if systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
-  SSHD_CONFIG="/etc/ssh/sshd_config"
+if platform sshd_active; then
+  SSHD_CONFIG=$(platform sshd_config_path)
   if [[ -f "$SSHD_CONFIG" ]]; then
     if grep -qiE "^PermitRootLogin\s+(no|prohibit-password)" "$SSHD_CONFIG" 2>/dev/null; then
       pass "CM-7: SSH PermitRootLogin is disabled or limited"
