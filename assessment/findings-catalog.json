@@ -1,0 +1,376 @@
+{
+  "_doc": {
+    "purpose": "Per-finding rationale catalog for sarge reports. report.sh joins this with assessment results by check_id to render the Findings section.",
+    "naming_convention": "<NIST-FAMILY>-<CONTROL-NUMBER>-<short-slug>. Family + control are uppercase (e.g. AC-3); slug is lowercase-kebab. Examples: AC-3-secrets-perm, CM-7-cups-running, IA-5-pwquality-minlen. IDs are stable — once published do not rename without a migration note.",
+    "schema": {
+      "family": "Long name of the NIST 800-53 Rev 5 family + control (e.g. 'AC-3 — Access Enforcement').",
+      "what": "Short description of the observed condition. Templates may include shell-style placeholders like {value} that report.sh leaves as-is — the finding 'description' from the check script is what actually appears in reports; this 'what' is reference-only.",
+      "expected": "What the value/state should be.",
+      "why": "2-3 sentences explaining the security risk. References the NIST 800-53 Rev 5 control by name.",
+      "fix": "Runnable command or one-line action."
+    },
+    "coverage": "Every fail \"...\" and warn \"...\" callsite in assessment/checks/check-*.sh. PASS/SKIP do not need entries."
+  },
+
+  "AC-2-empty-password": {
+    "family": "AC-2 — Account Management",
+    "what": "Local account(s) found with empty password fields in /etc/shadow",
+    "expected": "All accounts have a password set or are locked",
+    "why": "An empty password field allows login with no authentication, defeating identity assurance entirely. NIST 800-53 AC-2 requires the organization to manage account credentials and disable inactive or improperly provisioned accounts. Empty-password accounts are usually leftover service accounts or misconfigured users that an attacker can pivot through trivially.",
+    "fix": "sudo passwd -l <username>  # lock the account, or set a password with: sudo passwd <username>"
+  },
+  "AC-2-uid-zero": {
+    "family": "AC-2 — Account Management",
+    "what": "Non-root account(s) found with UID 0 in /etc/passwd",
+    "expected": "Only the 'root' account has UID 0",
+    "why": "UID 0 is the kernel's superuser — any account assigned UID 0 is root, regardless of name. NIST 800-53 AC-2 requires authoritative account inventory; shadow root accounts bypass auditing because logs key off the username while privileges key off the UID. Attackers create such accounts to persist through password rotations on the canonical root.",
+    "fix": "sudo usermod -u <new-uid> <username>  # assign a non-zero UID, or remove the account: sudo userdel <username>"
+  },
+
+  "AC-3-openclaw-dir-perm": {
+    "family": "AC-3 — Access Enforcement",
+    "what": "~/.openclaw directory permissions are not 700",
+    "expected": "700 (owner-only)",
+    "why": "The ~/.openclaw directory holds workspace state, agent memory, and credential paths used by OpenClaw subprocesses. NIST 800-53 AC-3 requires enforcement of approved access — group/world-readable workspace directories let other local users enumerate which agents and accounts the operator runs. Even read access leaks operational intent.",
+    "fix": "chmod 700 ~/.openclaw"
+  },
+  "AC-3-secrets-dir-perm": {
+    "family": "AC-3 — Access Enforcement",
+    "what": "~/.openclaw/secrets directory permissions are not 700",
+    "expected": "700 (owner-only)",
+    "why": "Group/world-readable secrets directory exposes OAuth tokens and API keys cached by OpenClaw to other local users or processes. NIST 800-53 AC-3 requires access enforcement that limits sensitive resources to authorized identities. Any unprivileged local process — including a compromised browser or editor — can read tokens and impersonate the operator against external services.",
+    "fix": "chmod 700 ~/.openclaw/secrets"
+  },
+  "AC-3-secret-file-perm": {
+    "family": "AC-3 — Access Enforcement",
+    "what": "Individual secret file under ~/.openclaw/secrets is not 600",
+    "expected": "600 (owner read/write only)",
+    "why": "Even if the parent directory is locked down, lax file modes on individual tokens allow exfiltration via backup, sync, or container bind-mount. NIST 800-53 AC-3 requires per-resource access enforcement, not just directory-level. A 644 token survives a tarball or rsync that preserves modes but loses parent-dir context.",
+    "fix": "chmod 600 ~/.openclaw/secrets/<file>"
+  },
+
+  "AC-6-passwordless-sudo": {
+    "family": "AC-6 — Least Privilege",
+    "what": "Current user has passwordless sudo (NOPASSWD) enabled",
+    "expected": "sudo requires a password (no NOPASSWD for this user)",
+    "why": "Passwordless sudo turns any code execution as the user — a malicious script, a hijacked editor plugin, a curl|bash mistake — into immediate root. NIST 800-53 AC-6 requires least privilege, including the principle that elevation must require an explicit re-authentication. Cron and CI runners sometimes need NOPASSWD for narrow commands; an interactive operator account should not.",
+    "fix": "Edit /etc/sudoers.d/ entries with 'sudo visudo' and remove NOPASSWD: from the operator user, or scope it to specific commands."
+  },
+  "AC-6-user-in-sudo-group": {
+    "family": "AC-6 — Least Privilege",
+    "what": "Current user is a member of the 'sudo' group",
+    "expected": "Service/operator accounts that don't need elevation should not be in 'sudo'",
+    "why": "Membership in 'sudo' confers blanket root capability subject only to password challenge. NIST 800-53 AC-6 calls for separation of duties between operational and administrative accounts. If this account runs OpenClaw, agents, or daemons day-to-day, a compromise of the agent shell becomes a compromise of root.",
+    "fix": "If a separate admin account exists: sudo deluser <username> sudo  # otherwise create a dedicated admin account first"
+  },
+
+  "AC-17-ufw-inactive": {
+    "family": "AC-17 — Remote Access",
+    "what": "UFW firewall is installed but not active",
+    "expected": "UFW reports 'Status: active'",
+    "why": "Without an active host firewall, any service that binds to an external interface is reachable from the network. NIST 800-53 AC-17 requires controls on remote access paths. An inactive firewall means the host depends entirely on perimeter or upstream protection — fine in some deployments, but invisible drift if you assumed UFW was enforcing.",
+    "fix": "sudo ufw enable  # review rules first with: sudo ufw status verbose"
+  },
+  "AC-17-ufw-not-installed": {
+    "family": "AC-17 — Remote Access",
+    "what": "UFW is not installed",
+    "expected": "UFW or another host firewall (nftables, firewalld) is in place",
+    "why": "Sarge can only attest to UFW; without it, host-level network access enforcement is unverified. NIST 800-53 AC-17 requires documented controls on remote access. If you use nftables or rely on a cloud security group, that's fine — but Sarge cannot confirm it, so this is flagged as a gap until you install UFW or document the alternative.",
+    "fix": "sudo apt install ufw && sudo ufw enable  # or document the alternative firewall in baseline/"
+  },
+  "AC-17-external-ports": {
+    "family": "AC-17 — Remote Access",
+    "what": "Externally-listening TCP ports detected (not bound to loopback)",
+    "expected": "Only intentionally-exposed services listen on non-loopback addresses",
+    "why": "Every externally-bound port is an attack surface. NIST 800-53 AC-17 requires that remote access points be authorized, monitored, and protected. Many drift incidents start with a service the operator forgot was exposed — a debug port, a leftover dev container, a default-config Postgres.",
+    "fix": "Review the listed ports with 'ss -tlnp' and either bind to 127.0.0.1, firewall the port, or document it as an intended remote service."
+  },
+
+  "AU-2-auditd-not-running": {
+    "family": "AU-2 — Audit Events",
+    "what": "auditd service is not running",
+    "expected": "auditd is active and persisting events",
+    "why": "Without auditd, security-relevant kernel and file events aren't recorded, so post-incident forensics rely entirely on application logs and journald (which can be tampered with by root). NIST 800-53 AU-2 requires the system to generate audit records for defined events; auditd is the standard Linux mechanism. No auditd = no defensible timeline.",
+    "fix": "sudo apt install auditd && sudo systemctl enable --now auditd"
+  },
+  "AU-2-journald-inactive": {
+    "family": "AU-2 — Audit Events",
+    "what": "systemd-journald is not active",
+    "expected": "systemd-journald running, or syslog explicitly configured as substitute",
+    "why": "journald collects logs from systemd units and the kernel; without it (or syslog), service logs are lost between restarts. NIST 800-53 AU-2 requires consistent audit event capture. A host with no journald and no syslog has no audit trail for daemon failures or security warnings.",
+    "fix": "sudo systemctl enable --now systemd-journald  # or verify rsyslog/syslog-ng is configured"
+  },
+  "AU-2-journal-not-persisted": {
+    "family": "AU-2 — Audit Events",
+    "what": "journald appears to not be persisting logs to disk",
+    "expected": "Storage=persistent in /etc/systemd/journald.conf",
+    "why": "When journald runs in volatile (RAM-only) mode, all logs vanish on reboot. NIST 800-53 AU-2 expects audit records to survive long enough to support incident response. A reboot during an attack erases the evidence.",
+    "fix": "sudo sed -i 's/^#\\?Storage=.*/Storage=persistent/' /etc/systemd/journald.conf && sudo systemctl restart systemd-journald"
+  },
+
+  "AU-9-audit-log-bad-owner": {
+    "family": "AU-9 — Protection of Audit Information",
+    "what": "/var/log/audit/audit.log is not owned by root",
+    "expected": "Owner is root",
+    "why": "Audit logs owned by a non-root user can be tampered with by that user, defeating non-repudiation. NIST 800-53 AU-9 requires audit information to be protected from unauthorized modification. If the audit log owner can write to it, the audit log can be edited to hide actions.",
+    "fix": "sudo chown root:root /var/log/audit/audit.log"
+  },
+  "AU-9-audit-log-perm": {
+    "family": "AU-9 — Protection of Audit Information",
+    "what": "/var/log/audit/audit.log permissions are not 600",
+    "expected": "600",
+    "why": "World/group-readable audit logs leak sensitive event metadata (commands run, files accessed, user activity) to any local account. NIST 800-53 AU-9 requires that audit information be protected from unauthorized read as well as write. This is also a covert-channel risk: a low-privilege process can fingerprint admin behaviour.",
+    "fix": "sudo chmod 600 /var/log/audit/audit.log"
+  },
+  "AU-9-audit-log-missing": {
+    "family": "AU-9 — Protection of Audit Information",
+    "what": "auditd is running but /var/log/audit/audit.log does not exist",
+    "expected": "audit.log present at the configured location",
+    "why": "auditd is daemonized but no log file exists at the standard path — likely a misconfiguration in /etc/audit/auditd.conf, or audit events being routed elsewhere. NIST 800-53 AU-9 cannot be enforced if the audit sink is unknown. This is a silent-failure mode where operators believe they have audit coverage but don't.",
+    "fix": "Check 'log_file' in /etc/audit/auditd.conf and review with: sudo aureport -t"
+  },
+
+  "AU-12-no-openclaw-rules": {
+    "family": "AU-12 — Audit Generation",
+    "what": "No audit rules cover ~/.openclaw/secrets",
+    "expected": "auditctl -l shows watch rules for the secrets directory",
+    "why": "Without watch rules, reads/writes to high-value secret material are not recorded. NIST 800-53 AU-12 requires that audit records be generated for defined auditable events — for sarge's threat model, OpenClaw secret access is one of those events. Detecting credential exfiltration after the fact requires this trail.",
+    "fix": "Run: scripts/harden-auditd.sh  # or add: sudo auditctl -w ~/.openclaw/secrets -p rwxa -k openclaw-secrets"
+  },
+  "AU-12-no-auth-rules": {
+    "family": "AU-12 — Audit Generation",
+    "what": "No audit rules cover /etc/passwd, /etc/shadow, or /etc/sudoers",
+    "expected": "Watch rules on the auth-critical files",
+    "why": "These files define who can log in and who can elevate. NIST 800-53 AU-12 expects audit generation for changes to authentication and authorization data. Unmonitored writes to /etc/sudoers are a classic persistence vector.",
+    "fix": "sudo auditctl -w /etc/passwd -p wa -k identity && sudo auditctl -w /etc/shadow -p wa -k identity && sudo auditctl -w /etc/sudoers -p wa -k identity"
+  },
+
+  "CM-2-no-baseline": {
+    "family": "CM-2 — Baseline Configuration",
+    "what": "Sarge baseline file (baseline/openclaw.json.baseline) not found",
+    "expected": "Baseline file present in repo to anchor drift detection",
+    "why": "Without a documented baseline, every change looks new and there's no anchor for what 'good' looks like. NIST 800-53 CM-2 requires maintaining a current baseline configuration of the information system. For sarge specifically, the baseline file is what subsequent runs compare against to detect drift in the OpenClaw layout.",
+    "fix": "Restore baseline/openclaw.json.baseline from the sarge repo, or regenerate from a known-good host."
+  },
+
+  "CM-6-unattended-not-installed": {
+    "family": "CM-6 — Configuration Settings",
+    "what": "unattended-upgrades package is not installed",
+    "expected": "unattended-upgrades installed and configured for security updates",
+    "why": "Without unattended-upgrades, security patches require manual intervention and tend to lag. NIST 800-53 CM-6 (and SI-2 / Flaw Remediation) require timely application of vendor-released fixes. Background auto-patching narrows the window between disclosure and exploitation.",
+    "fix": "sudo apt install unattended-upgrades && sudo dpkg-reconfigure -plow unattended-upgrades"
+  },
+  "CM-6-unattended-not-configured": {
+    "family": "CM-6 — Configuration Settings",
+    "what": "unattended-upgrades is installed but the auto-reboot setting in 50unattended-upgrades is not configured",
+    "expected": "Unattended-Upgrade::Automatic-Reboot directive present",
+    "why": "Installed-but-unconfigured leaves you believing patches are applied when in fact the policy file is incomplete. NIST 800-53 CM-6 requires documented and enforced configuration. Verify the file contents match your maintenance window — kernel updates without auto-reboot still leave the host on the old vulnerable kernel.",
+    "fix": "Edit /etc/apt/apt.conf.d/50unattended-upgrades and confirm Automatic-Reboot, Allowed-Origins, and email settings match policy."
+  },
+  "CM-6-pending-updates-low": {
+    "family": "CM-6 — Configuration Settings",
+    "what": "Small number of package updates pending (1-5)",
+    "expected": "Apply pending updates within the maintenance window",
+    "why": "A small backlog is normal but should not be allowed to grow. NIST 800-53 CM-6 / SI-2 require tracking and applying configuration and security updates. Catching this at single-digit count keeps the apply-and-test cycle cheap.",
+    "fix": "sudo apt update && sudo apt upgrade  # review first with: apt list --upgradable"
+  },
+  "CM-6-pending-updates-high": {
+    "family": "CM-6 — Configuration Settings",
+    "what": "More than 5 package updates pending",
+    "expected": "Apply security updates immediately",
+    "why": "A large patch backlog usually means the host has missed at least one security advisory cycle. NIST 800-53 CM-6 / SI-2 require timely flaw remediation. Each unpatched package multiplies the chance that a published CVE is exploitable on this host.",
+    "fix": "sudo apt update && sudo apt upgrade  # for security-only: sudo unattended-upgrade -d"
+  },
+
+  "CM-7-risky-service-running": {
+    "family": "CM-7 — Least Functionality",
+    "what": "A service from the deny-list is currently running (telnet, rsh, rlogin, vsftpd, pure-ftpd, proftpd, xinetd, cups, avahi-daemon)",
+    "expected": "Service stopped and disabled if not explicitly required",
+    "why": "These services are commonly enabled by default but rarely needed on a server, and several (telnet, rsh, rlogin, plain FTP) transmit credentials in clear. NIST 800-53 CM-7 requires the system be configured to provide only essential capabilities. Each unused listener is an attack surface for no functional gain.",
+    "fix": "sudo systemctl disable --now <service>  # confirm with whoever owns the host first"
+  },
+  "CM-7-risky-service-enabled": {
+    "family": "CM-7 — Least Functionality",
+    "what": "A risky service is enabled (will start at boot) even though not currently running",
+    "expected": "Service disabled if not explicitly required",
+    "why": "An enabled-but-stopped service is one reboot or one operator mistake away from active. NIST 800-53 CM-7 requires removing or disabling unused capabilities — leaving them enabled defers the risk rather than removing it. This is a common 'I'll fix it later' state that quietly persists.",
+    "fix": "sudo systemctl disable <service>  # and consider: sudo apt purge <package>"
+  },
+  "CM-7-ssh-permit-root": {
+    "family": "CM-7 — Least Functionality",
+    "what": "SSH PermitRootLogin is not 'no' or 'prohibit-password'",
+    "expected": "PermitRootLogin no  (or prohibit-password if key-only root is required)",
+    "why": "Direct root SSH login means a single compromised credential or key is full system takeover, with no audit trail tying actions to a human operator. NIST 800-53 CM-7 (least functionality) and AC-6 (least privilege) both argue for forcing operators to log in as themselves and elevate via sudo. This also breaks brute-force attempts since 'root' is the universal target username.",
+    "fix": "sudo sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload ssh"
+  },
+  "CM-7-ssh-password-auth": {
+    "family": "CM-7 — Least Functionality",
+    "what": "SSH PasswordAuthentication is not explicitly disabled",
+    "expected": "PasswordAuthentication no  (key-based auth only)",
+    "why": "Password-based SSH is vulnerable to brute force and credential stuffing in a way key-based auth is not. NIST 800-53 CM-7 plus IA-2 (identification & authentication) favor cryptographic authenticators over reusable passwords for remote access. Once you've migrated all operators to keys, this should be locked down.",
+    "fix": "sudo sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload ssh  # confirm key-based login works first"
+  },
+
+  "IA-5-pass-max-days": {
+    "family": "IA-5 — Authenticator Management",
+    "what": "PASS_MAX_DAYS in /etc/login.defs is unset or greater than 90",
+    "expected": "PASS_MAX_DAYS <= 90",
+    "why": "Without password-age caps, compromised credentials remain valid indefinitely. NIST 800-53 IA-5 requires periodic authenticator refresh. While modern guidance debates rotation frequency for human users, server policy still typically enforces a ceiling so that abandoned accounts can't accumulate stale, breached credentials.",
+    "fix": "sudo sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\\t90/' /etc/login.defs"
+  },
+  "IA-5-pass-min-days": {
+    "family": "IA-5 — Authenticator Management",
+    "what": "PASS_MIN_DAYS in /etc/login.defs is unset or 0",
+    "expected": "PASS_MIN_DAYS >= 1",
+    "why": "PASS_MIN_DAYS=0 lets a user immediately rotate back to a previous password, defeating any history-based reuse policy. NIST 800-53 IA-5 expects password change controls to actually take effect. A non-zero minimum prevents the trivial 'change-then-change-back' bypass.",
+    "fix": "sudo sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS\\t1/' /etc/login.defs"
+  },
+  "IA-5-pass-warn-age": {
+    "family": "IA-5 — Authenticator Management",
+    "what": "PASS_WARN_AGE in /etc/login.defs is unset or below 7",
+    "expected": "PASS_WARN_AGE >= 7",
+    "why": "Without an expiry warning window, users are surprised by lockout and tend to pick low-effort replacement passwords under time pressure. NIST 800-53 IA-5 supports operationally workable authenticator management. A week of warning lets users plan a real password rotation.",
+    "fix": "sudo sed -i 's/^PASS_WARN_AGE.*/PASS_WARN_AGE\\t7/' /etc/login.defs"
+  },
+
+  "IA-5-pwquality-minlen": {
+    "family": "IA-5 — Authenticator Management",
+    "what": "pwquality minlen is unset or below 12",
+    "expected": "minlen >= 12",
+    "why": "Short passwords are within reach of offline cracking against any leaked hash. NIST 800-53 IA-5 requires authenticators of sufficient strength for the protected resource. 12 characters is the contemporary floor for password complexity guidance against modern GPU-assisted cracking.",
+    "fix": "Edit /etc/security/pwquality.conf and set: minlen = 12"
+  },
+  "IA-5-pwquality-credit": {
+    "family": "IA-5 — Authenticator Management",
+    "what": "pwquality character-class credits (dcredit/ucredit/ocredit/lcredit) not set",
+    "expected": "Credits configured to require character-class diversity",
+    "why": "Without character-class credits, pwquality only enforces length — users may pick all-lowercase strings. NIST 800-53 IA-5 calls for authenticator complexity appropriate to the threat. Class credits force at least some diversity even when minlen alone would pass.",
+    "fix": "Edit /etc/security/pwquality.conf and add: dcredit = -1, ucredit = -1, ocredit = -1, lcredit = -1"
+  },
+  "IA-5-pwquality-missing": {
+    "family": "IA-5 — Authenticator Management",
+    "what": "/etc/security/pwquality.conf does not exist",
+    "expected": "libpam-pwquality installed and configured",
+    "why": "No pwquality means no enforced complexity, length, or dictionary checks at password-set time. NIST 800-53 IA-5 requires authenticator strength enforcement at the point of creation, not just at the point of use. Without pwquality, weak passwords get accepted and only get caught later (if ever) by a breach.",
+    "fix": "sudo apt install libpam-pwquality  # then configure /etc/security/pwquality.conf"
+  },
+
+  "IA-2-faillock-not-configured": {
+    "family": "IA-2 — Identification and Authentication",
+    "what": "pam_faillock is not configured in /etc/pam.d/common-auth",
+    "expected": "pam_faillock entries present in PAM auth stack",
+    "why": "Without account-lockout, brute-force attempts can run unbounded against console and SSH password logins. NIST 800-53 IA-2 expects the system to limit consecutive invalid login attempts. faillock is the standard Linux mechanism; without it, defense relies entirely on fail2ban or upstream rate limiting.",
+    "fix": "sudo pam-auth-update --enable faillock  # then review /etc/security/faillock.conf"
+  },
+  "IA-2-faillock-deny": {
+    "family": "IA-2 — Identification and Authentication",
+    "what": "faillock deny threshold is unset or above 5",
+    "expected": "deny <= 5 attempts",
+    "why": "A high deny threshold allows many guesses before lockout, undermining the brute-force protection. NIST 800-53 IA-2 expects login-attempt limits sized to deter automated guessing. Five is a common balance between operator typos and attacker scripts.",
+    "fix": "Edit /etc/security/faillock.conf and set: deny = 5"
+  },
+  "IA-2-faillock-unlock-time": {
+    "family": "IA-2 — Identification and Authentication",
+    "what": "faillock unlock_time is unset or below 1800 seconds",
+    "expected": "unlock_time >= 1800 (30 min)",
+    "why": "Short unlock windows let an attacker resume guessing minutes later, drastically extending the effective attempt budget. NIST 800-53 IA-2 expects lockout durations long enough to actually slow brute force. 30 minutes per lock keeps attacker throughput negligible while remaining recoverable for legitimate operator typos.",
+    "fix": "Edit /etc/security/faillock.conf and set: unlock_time = 1800"
+  },
+  "IA-2-faillock-conf-missing": {
+    "family": "IA-2 — Identification and Authentication",
+    "what": "pam_faillock referenced in PAM stack but /etc/security/faillock.conf is missing",
+    "expected": "faillock.conf present with documented thresholds",
+    "why": "Without the conf file, faillock falls back to compiled defaults — defaults that vary across distributions and are hard to audit. NIST 800-53 IA-2 expects authenticator behavior to be documented and enforced. Drop the conf in place to make policy explicit.",
+    "fix": "sudo cp /usr/share/doc/libpam-modules/examples/faillock.conf /etc/security/faillock.conf  # or create from scratch with deny= and unlock_time= entries"
+  },
+  "IA-2-tmout-unset": {
+    "family": "IA-2 — Identification and Authentication",
+    "what": "TMOUT shell timeout not configured in /etc/profile or /etc/profile.d/",
+    "expected": "TMOUT set (recommend 900 seconds)",
+    "why": "Idle interactive sessions left logged in are a session-hijacking risk if the operator walks away. NIST 800-53 IA-2 (specifically IA-2(8) — session lock) calls for terminating or locking sessions after a defined inactivity period. TMOUT is the bash-level mechanism; it complements display-locker policies for unattended terminals.",
+    "fix": "echo 'TMOUT=900' | sudo tee /etc/profile.d/tmout.sh && sudo chmod 644 /etc/profile.d/tmout.sh"
+  },
+
+  "SC-8-cloudflared-not-detected": {
+    "family": "SC-8 — Transmission Confidentiality",
+    "what": "OpenClaw gateway is listening but cloudflared is not running",
+    "expected": "cloudflared running (Cloudflare Tunnel TLS termination) or TLS configured directly on the gateway",
+    "why": "Without TLS termination, gateway traffic is unencrypted on the wire, exposing tokens and agent payloads. NIST 800-53 SC-8 requires confidentiality of transmitted information. The OpenClaw deployment pattern relies on Cloudflare Tunnel for TLS; if cloudflared isn't running, either the tunnel is down or the gateway is exposed without TLS.",
+    "fix": "sudo systemctl start cloudflared  # or: cloudflared tunnel run <tunnel-name>  # if direct access intended, configure TLS on the gateway and document"
+  },
+
+  "SC-28-config-perm": {
+    "family": "SC-28 — Protection of Information at Rest",
+    "what": "~/.openclaw/config.json permissions are not 600 or 400",
+    "expected": "600 (or 400 if read-only is sufficient)",
+    "why": "config.json holds connection details and possibly inline credentials for the OpenClaw runtime. NIST 800-53 SC-28 requires protection of information at rest. World/group-readable config gives any local process a roadmap of services and their auth material.",
+    "fix": "chmod 600 ~/.openclaw/config.json"
+  },
+  "SC-28-config-owner": {
+    "family": "SC-28 — Protection of Information at Rest",
+    "what": "~/.openclaw/config.json is owned by an unexpected user",
+    "expected": "Owned by the current operator/service user",
+    "why": "Wrong ownership often means the file was created by a different account (root via sudo, an installer, or a previous user) and may have unexpected permission semantics. NIST 800-53 SC-28 + AC-3 require explicit ownership of sensitive resources. Sort out who is supposed to own the config and align permissions.",
+    "fix": "sudo chown $(whoami):$(whoami) ~/.openclaw/config.json"
+  },
+  "SC-28-world-readable-secrets": {
+    "family": "SC-28 — Protection of Information at Rest",
+    "what": "World-readable files found inside ~/.openclaw",
+    "expected": "No files in ~/.openclaw are world-readable (mode bit o+r unset)",
+    "why": "World-readable files in the OpenClaw workspace expose agent state, memory snippets, and potentially cached credentials to any local user. NIST 800-53 SC-28 requires confidentiality at rest. Even non-secret workspace files can leak operational intelligence (agent names, schedules, target hostnames).",
+    "fix": "chmod -R o-r ~/.openclaw  # then re-verify with: find ~/.openclaw -type f -perm /004"
+  },
+
+  "SI-2-security-updates-low": {
+    "family": "SI-2 — Flaw Remediation",
+    "what": "1-3 security updates pending",
+    "expected": "Apply security updates within the maintenance window",
+    "why": "Even a small number of pending security updates represents known-exploitable surface. NIST 800-53 SI-2 requires the organization to identify, report, and correct flaws in a timely manner. Catching this early keeps the apply-and-test cost low.",
+    "fix": "sudo unattended-upgrade -d  # or: sudo apt upgrade  # for security-only the unattended path is preferred"
+  },
+  "SI-2-security-updates-high": {
+    "family": "SI-2 — Flaw Remediation",
+    "what": "More than 3 security updates pending",
+    "expected": "Apply security updates immediately",
+    "why": "A large security backlog means the host has likely missed at least one published advisory cycle. NIST 800-53 SI-2 requires timely flaw remediation; this is the canonical metric. Schedule the patch window now — every additional day extends the exposure to publicly known vulnerabilities.",
+    "fix": "sudo apt update && sudo unattended-upgrade -d  # follow with: sudo reboot if kernel updates were included"
+  },
+
+  "SI-3-clamav-not-installed": {
+    "family": "SI-3 — Malicious Code Protection",
+    "what": "ClamAV is not installed",
+    "expected": "ClamAV (or another endpoint malware scanner) installed",
+    "why": "Without an on-host malware scanner, attached files (downloads, email attachments, agent inputs) are unscreened. NIST 800-53 SI-3 requires malicious code protection. ClamAV is the conventional Linux choice; alternatives are acceptable but Sarge can only attest to ClamAV today.",
+    "fix": "sudo apt install clamav clamav-daemon clamav-freshclam"
+  },
+  "SI-3-clamav-daemon-stopped": {
+    "family": "SI-3 — Malicious Code Protection",
+    "what": "ClamAV is installed but clamav-daemon is not running",
+    "expected": "clamav-daemon active for on-access scanning",
+    "why": "An installed-but-stopped scanner provides no protection. NIST 800-53 SI-3 requires the protection mechanism to actually run. The daemon enables on-access scanning rather than only scheduled batch scans.",
+    "fix": "sudo systemctl enable --now clamav-daemon"
+  },
+  "SI-3-freshclam-stopped": {
+    "family": "SI-3 — Malicious Code Protection",
+    "what": "ClamAV signature updater (freshclam) is not running",
+    "expected": "clamav-freshclam active to keep signatures current",
+    "why": "ClamAV with stale signatures will miss everything published after the last update. NIST 800-53 SI-3 requires malicious code protection mechanisms to be kept current. freshclam handles automatic signature refresh; without it, your scanner ages out of usefulness within days.",
+    "fix": "sudo systemctl enable --now clamav-freshclam"
+  },
+
+  "SI-3-fail2ban-not-running": {
+    "family": "SI-3 — Malicious Code Protection (extended: brute-force)",
+    "what": "fail2ban is not running",
+    "expected": "fail2ban active with appropriate jails (sshd, etc.)",
+    "why": "fail2ban is the host-side rate-limiter for SSH and other auth daemons; without it, brute-force attempts run as fast as the network allows. NIST 800-53 SI-3 (and IA-2) expect controls against automated credential attacks. fail2ban complements faillock by acting at the network/process layer rather than only at PAM.",
+    "fix": "sudo apt install fail2ban && sudo systemctl enable --now fail2ban  # or run scripts/harden-fail2ban.sh"
+  },
+
+  "SI-7-checksum-mismatch": {
+    "family": "SI-7 — Software, Firmware, and Information Integrity",
+    "what": "Sarge script checksum verification FAILED",
+    "expected": "All files listed in CHECKSUMS.sha256 match their recorded hashes",
+    "why": "A checksum mismatch means a sarge script has been modified since the checksum was recorded — either an authorized update (in which case the checksum file is stale) or unauthorized tampering. NIST 800-53 SI-7 requires integrity verification of system software. Sarge is itself a security tool; tampering with it could mute the very findings it should report.",
+    "fix": "Re-clone the sarge repo from a trusted source, or if the change was intentional: regenerate checksums with: sha256sum scripts/*.sh assessment/**/*.sh > CHECKSUMS.sha256"
+  }
+}
