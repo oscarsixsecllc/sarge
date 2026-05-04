@@ -99,12 +99,25 @@ function Get-SargeWindowsContext {
     # can run it; some fields are blank without elevation but the four we read
     # (AzureAdJoined, DomainJoined, DomainName, MdmUrl) are populated for
     # standard users on supported Windows versions.
+    # Capture dsregcmd via a temp file. Direct stdout capture (`& dsregcmd.exe`
+    # or `2>&1`) often returns empty under pwsh because dsregcmd writes through
+    # the console host in a way that bypasses standard pipeline capture. The
+    # `cmd /c ... > file` redirection is the reliable pattern.
     $dsreg = Invoke-SargeProbe -ErrorKey 'dsregcmd' -ProbeErrors $probeErrors -Probe {
-        $raw = & dsregcmd.exe /status 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "dsregcmd exited $LASTEXITCODE"
+        $tmp = [System.IO.Path]::GetTempFileName()
+        try {
+            & cmd.exe /c "dsregcmd /status > `"$tmp`" 2>&1" | Out-Null
+            $raw = Get-Content -LiteralPath $tmp -ErrorAction Stop
+            if ($null -eq $raw -or $raw.Count -eq 0) {
+                throw 'dsregcmd produced no output'
+            }
+            # Normalize to string[] so the parser parameter binding succeeds
+            # even when there is exactly one line of output.
+            ConvertFrom-DsRegCmdOutput -Lines @($raw)
         }
-        ConvertFrom-DsRegCmdOutput -Lines $raw
+        finally {
+            Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
+        }
     }
 
     # Win32_ComputerSystem fallback for domain-join only (dsregcmd preferred
@@ -165,16 +178,25 @@ function Get-SargeWindowsContext {
     #   https://learn.microsoft.com/en-us/powershell/module/applocker/get-applockerpolicy
     # The cmdlet ships with the AppLocker module which is available on
     # Enterprise / Education / Server SKUs. On Home / Pro it may be missing.
+    # An "empty" policy is one whose RuleCollections contain no rules. We avoid
+    # calling $policy.ToXml() because Constrained Language Mode (active when
+    # WDAC is enforced) blocks arbitrary .NET method invocation on imported
+    # types — the call would throw "does not contain a method named 'ToXml'".
+    # Iterating RuleCollections.Count via property access is CLM-safe.
     $applockerActive = Invoke-SargeProbe -ErrorKey 'applocker' -ProbeErrors $probeErrors -Probe {
         if (-not (Get-Command Get-AppLockerPolicy -ErrorAction SilentlyContinue)) {
             throw 'Get-AppLockerPolicy not available on this SKU'
         }
         $policy = Get-AppLockerPolicy -Effective -ErrorAction Stop
-        # An "empty" policy is one with no RuleCollections containing rules.
-        # Convert to XML and check for any <FilePathRule>, <FileHashRule>, or
-        # <FilePublisherRule> element.
-        $xml = $policy.ToXml()
-        return ($xml -match '<File(Path|Hash|Publisher)Rule\b')
+        if ($null -eq $policy -or $null -eq $policy.RuleCollections) {
+            return $false
+        }
+        foreach ($rc in $policy.RuleCollections) {
+            if ($null -ne $rc.Count -and $rc.Count -gt 0) {
+                return $true
+            }
+        }
+        return $false
     }
 
     # ---- WDAC / Device Guard ------------------------------------------------
