@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-v0.1.1-green)](https://github.com/oscarsixsecllc/sarge/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20macOS-orange)](docs/quickstart.md)
+[![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20macOS%20%7C%20Windows-orange)](docs/quickstart.md)
 
 Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool, and drift detection system designed exclusively for [OpenClaw](https://openclaw.ai) deployments.
 
@@ -61,9 +61,9 @@ Full docs: [docs/quickstart.md](docs/quickstart.md)
 | System & Information Integrity | SI | 5 | Partial |
 | **Total** | | **47** | |
 
-**Baseline:** NIST SP 800-53 Rev 5 | **Platforms:** Ubuntu 22.04 / 24.04 LTS (full); macOS (rolling out across PRs)
+**Baseline:** NIST SP 800-53 Rev 5 | **Platforms:** Ubuntu 22.04 / 24.04 LTS (full); macOS (rolling out across PRs); Windows (detection-only, controls land per [#12](https://github.com/oscarsixsecllc/sarge/issues/12))
 
-> **Platform support status:** Full coverage on Ubuntu 22.04 / 24.04 LTS today. macOS support is being added one module at a time so each platform's 800-53 mapping can be reviewed independently. On macOS, `scripts/install.sh` currently applies file-permission hardening only; gap analysis and drift detection refuse cleanly until their macOS-aware probes ship. Roadmap is tracked in [GitHub issues](https://github.com/oscarsixsecllc/sarge/issues).
+> **Platform support status:** Full coverage on Ubuntu 22.04 / 24.04 LTS today. macOS support is being added one module at a time so each platform's 800-53 mapping can be reviewed independently. On macOS, `scripts/install.sh` currently applies file-permission hardening only; gap analysis and drift detection refuse cleanly until their macOS-aware probes ship. **Windows is detection-only today** — `assessment/assess.ps1` runs read-only PowerShell probes that capture enterprise context (domain / AAD join, Intune enrollment, GPO, AppLocker, WDAC, Defender) so downstream OpenClaw-on-Windows control checks can defer to your existing control authority where appropriate. Per-control Windows checks land one PR at a time under [#12](https://github.com/oscarsixsecllc/sarge/issues/12). Sarge on Windows is scoped to OpenClaw deployment hardening — it is not a generic Windows hardening tool. Roadmap is tracked in [GitHub issues](https://github.com/oscarsixsecllc/sarge/issues).
 
 > **Why SC and SI are partial:**
 > 
