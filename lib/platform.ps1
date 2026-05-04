@@ -99,21 +99,26 @@ function Get-SargeWindowsContext {
     # can run it; some fields are blank without elevation but the four we read
     # (AzureAdJoined, DomainJoined, DomainName, MdmUrl) are populated for
     # standard users on supported Windows versions.
-    # Capture dsregcmd via a temp file. Direct stdout capture (`& dsregcmd.exe`
-    # or `2>&1`) often returns empty under pwsh because dsregcmd writes through
-    # the console host in a way that bypasses standard pipeline capture. The
-    # `cmd /c ... > file` redirection is the reliable pattern.
+    # Capture dsregcmd output. Avoid `[System.IO.Path]::GetTempFileName()` and
+    # other arbitrary .NET method invocations because Constrained Language Mode
+    # (active under WDAC enforcement) blocks them — the script runs in CLM
+    # even when the user's interactive console is FullLanguage. We use only
+    # cmdlets and PowerShell built-ins here, all of which are CLM-safe.
     $dsreg = Invoke-SargeProbe -ErrorKey 'dsregcmd' -ProbeErrors $probeErrors -Probe {
-        $tmp = [System.IO.Path]::GetTempFileName()
+        $tmp = Join-Path $env:TEMP ("sarge-dsreg-" + (Get-Random) + ".txt")
         try {
-            & cmd.exe /c "dsregcmd /status > `"$tmp`" 2>&1" | Out-Null
+            dsregcmd /status 2>&1 | Out-File -Encoding utf8 -LiteralPath $tmp
             $raw = Get-Content -LiteralPath $tmp -ErrorAction Stop
-            if ($null -eq $raw -or $raw.Count -eq 0) {
+            # Coerce to string[] of non-empty lines. Get-Content can return:
+            #   - $null (file missing) — caught by Stop above
+            #   - a single string (1-line file) — wrap in @()
+            #   - an array of strings (multi-line) — already string[]
+            #   - an array containing only empty strings (whitespace file)
+            $lines = @($raw) | Where-Object { $null -ne $_ -and $_ -ne '' }
+            if ($lines.Count -eq 0) {
                 throw 'dsregcmd produced no output'
             }
-            # Normalize to string[] so the parser parameter binding succeeds
-            # even when there is exactly one line of output.
-            ConvertFrom-DsRegCmdOutput -Lines @($raw)
+            ConvertFrom-DsRegCmdOutput -Lines $lines
         }
         finally {
             Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
