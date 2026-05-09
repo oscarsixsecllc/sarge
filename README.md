@@ -114,6 +114,25 @@ See [SECURITY.md](SECURITY.md) for vulnerability disclosure policy.
 
 ---
 
+## Script Exit Codes
+
+Sarge scripts use exit codes to signal *what they did*, not just *whether they succeeded*. The contract differs per script because each one serves a different role. Unless explicitly noted below, any non-`0` / non-`2` exit should be treated as an unexpected runtime or precondition error and investigated from the script output.
+
+| Script | Exit 0 | Exit 2 | Notes |
+|---|---|---|---|
+| `assessment/assess.sh` | Assessment ran; Markdown + JSON report generated | Platform not yet supported (no assessment performed) | **Exit 0 ≠ "your system passed."** Read the report for PASS/WARN/FAIL counts. |
+| `scripts/install.sh` | Hardening complete (or operator declined at any prompt) | Platform unsupported | Each module also prompts `[y/N]`; declining a module is exit 0 from that module. Privilege requirements vary per module (see below). |
+| `scripts/harden-*.sh` | Module applied (or operator declined) | — | **Privilege requirements vary by module — check each script's header for the authoritative requirement.** `harden-permissions.sh` runs as the invoking user and uses `$HOME` (do **not** invoke with `sudo` directly, or `$HOME` will resolve to `/root` and the wrong workspace will be hardened). The other modules (`harden-pam`, `harden-auditd`, `harden-fail2ban`, `harden-ufw`, `harden-systemd`) write to `/etc/` and require `sudo`. |
+| `drift/snapshot.sh` | Snapshot captured *or* clean skip on non-applicable platform | Platform unsupported | Designed to be safe in cron. |
+| `drift/compare.sh` | No drift detected *or* clean skip on non-applicable platform | Drift detected **or** platform unsupported (read script output to disambiguate) | Exits `1` when no snapshot exists (`No snapshot found. Run snapshot.sh first.`) — run `snapshot.sh` first. |
+| `drift/drift-cron.sh` | Success or clean skip | Platform unsupported | Wraps `compare.sh`; suitable for cron. |
+
+> **Why `assess.sh` exits 2 (not 0) on unsupported platforms.** Assessment is a *measurement* tool — exit 0 carries the meaning "I performed an assessment and produced a report." A silent exit 0 on an unsupported platform could be misread by CI pipelines as "this host has zero NIST gaps." Drift scripts use exit 0 for clean-skip because skipping is the desired behavior under cron; assess is interactive and CI-driven, where a loud failure is the correct signal.
+
+> **Verbose skip messages.** `sarge_require_os` (used by Linux-only modules to skip cleanly on macOS) is silent by default. Set `SARGE_VERBOSE=1` in the environment to see why a module skipped.
+
+---
+
 ## Repository Structure
 
 ```
