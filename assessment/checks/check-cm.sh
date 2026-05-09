@@ -7,34 +7,34 @@ SARGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # CM-2: Baseline configuration documented
 log "CM-2: Baseline configuration"
 if [[ -f "$SARGE_DIR/baseline/openclaw.json.baseline" ]]; then
-  pass "CM-2: Sarge baseline config file exists"
+  passx "CM-2-no-baseline" "CM-2: Sarge baseline config file exists"
 else
-  warn "CM-2: No Sarge baseline found at $SARGE_DIR/baseline/openclaw.json.baseline"
+  warnx "CM-2-no-baseline" "CM-2: No Sarge baseline found at $SARGE_DIR/baseline/openclaw.json.baseline"
 fi
 
 # CM-6: Unattended security upgrades
 log "CM-6: Automatic security updates"
 if platform package_installed unattended-upgrades; then
-  pass "CM-6: unattended-upgrades is installed"
+  passx "CM-6-unattended-not-installed" "CM-6: unattended-upgrades is installed"
   UA_CONF=$(platform unattended_upgrades_config_path)
   if [[ -f "$UA_CONF" ]] && grep -q "Unattended-Upgrade::Automatic-Reboot" "$UA_CONF" 2>/dev/null; then
-    pass "CM-6: unattended-upgrades configured"
+    passx "CM-6-unattended-not-configured" "CM-6: unattended-upgrades configured"
   else
-    warn "CM-6: unattended-upgrades installed but configuration not verified — check $UA_CONF"
+    warnx "CM-6-unattended-not-configured" "CM-6: unattended-upgrades installed but configuration not verified — check $UA_CONF"
   fi
 else
-  fail "CM-6: unattended-upgrades not installed — sudo apt install unattended-upgrades"
+  failx "CM-6-unattended-not-installed" "CM-6: unattended-upgrades not installed — sudo apt install unattended-upgrades"
 fi
 
 # CM-6: Pending security updates
 log "CM-6: Pending updates"
 PENDING=$(platform pending_package_updates_count)
 if [[ "$PENDING" -eq 0 ]]; then
-  pass "CM-6: No pending package updates"
+  passx "CM-6-pending-updates-low" "CM-6: No pending package updates"
 elif [[ "$PENDING" -le 5 ]]; then
-  warn "CM-6: $PENDING package updates pending — review and apply"
+  warnx "CM-6-pending-updates-low" "CM-6: $PENDING package updates pending — review and apply"
 else
-  fail "CM-6: $PENDING package updates pending — apply security updates immediately"
+  failx "CM-6-pending-updates-high" "CM-6: $PENDING package updates pending — apply security updates immediately"
 fi
 
 # CM-7: Least functionality — unnecessary services
@@ -42,11 +42,11 @@ log "CM-7: Unnecessary services"
 RISKY_SERVICES=("telnet" "rsh" "rlogin" "vsftpd" "pure-ftpd" "proftpd" "xinetd" "cups" "avahi-daemon")
 for svc in "${RISKY_SERVICES[@]}"; do
   if platform service_active "$svc"; then
-    fail "CM-7: Unnecessary/risky service is running: $svc"
+    failx "CM-7-risky-service-running" "CM-7: Unnecessary/risky service is running: $svc"
   elif platform service_enabled "$svc"; then
-    warn "CM-7: Unnecessary/risky service is enabled (not running): $svc"
+    warnx "CM-7-risky-service-enabled" "CM-7: Unnecessary/risky service is enabled (not running): $svc"
   else
-    pass "CM-7: $svc is not active or enabled"
+    passx "CM-7-risky-service-running" "CM-7: $svc is not active or enabled"
   fi
 done
 
@@ -56,14 +56,14 @@ if platform sshd_active; then
   SSHD_CONFIG=$(platform sshd_config_path)
   if [[ -f "$SSHD_CONFIG" ]]; then
     if grep -qiE "^PermitRootLogin\s+(no|prohibit-password)" "$SSHD_CONFIG" 2>/dev/null; then
-      pass "CM-7: SSH PermitRootLogin is disabled or limited"
+      passx "CM-7-ssh-permit-root" "CM-7: SSH PermitRootLogin is disabled or limited"
     else
-      fail "CM-7: SSH PermitRootLogin should be 'no' or 'prohibit-password'"
+      failx "CM-7-ssh-permit-root" "CM-7: SSH PermitRootLogin should be 'no' or 'prohibit-password'"
     fi
     if grep -qiE "^PasswordAuthentication\s+no" "$SSHD_CONFIG" 2>/dev/null; then
-      pass "CM-7: SSH PasswordAuthentication disabled (key-only)"
+      passx "CM-7-ssh-password-auth" "CM-7: SSH PasswordAuthentication disabled (key-only)"
     else
-      warn "CM-7: SSH PasswordAuthentication is not explicitly disabled — consider key-only auth"
+      warnx "CM-7-ssh-password-auth" "CM-7: SSH PasswordAuthentication is not explicitly disabled — consider key-only auth"
     fi
   fi
 fi

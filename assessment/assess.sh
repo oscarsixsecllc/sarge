@@ -29,6 +29,7 @@ fi
 source "${REPO_ROOT}/lib/platforms/_dispatch.sh"
 
 REPORT_DIR="${SARGE_REPORT_DIR:-$HOME/.sarge/reports}"
+STATE_DIR="${SARGE_STATE_DIR:-$HOME/.sarge/state}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_BASE="${REPORT_DIR}/sarge-report-${TIMESTAMP}"
 
@@ -36,15 +37,39 @@ REPORT_BASE="${REPORT_DIR}/sarge-report-${TIMESTAMP}"
 PASS=0; WARN=0; FAIL=0; SKIP=0
 declare -a RESULTS=()
 
-mkdir -p "$REPORT_DIR"
+mkdir -p "$REPORT_DIR" "$STATE_DIR"
+
+# Initialize install timestamp on first run
+INSTALLED_AT_FILE="$STATE_DIR/installed-at.txt"
+if [[ ! -f "$INSTALLED_AT_FILE" ]]; then
+  date -Iseconds -u > "$INSTALLED_AT_FILE"
+fi
+
+# Initialize drift counter on first run
+DRIFT_COUNT_FILE="$STATE_DIR/drift-count.txt"
+if [[ ! -f "$DRIFT_COUNT_FILE" ]]; then
+  echo 0 > "$DRIFT_COUNT_FILE"
+fi
 
 log()   { echo "[SARGE] $*"; }
-pass()  { echo "  [PASS] $*"; PASS=$((PASS+1)); RESULTS+=("PASS|$*"); }
-warn()  { echo "  [WARN] $*"; WARN=$((WARN+1)); RESULTS+=("WARN|$*"); }
-fail()  { echo "  [FAIL] $*"; FAIL=$((FAIL+1)); RESULTS+=("FAIL|$*"); }
-skip()  { echo "  [SKIP] $*"; SKIP=$((SKIP+1)); RESULTS+=("SKIP|$*"); }
 
-export -f pass warn fail skip
+# Legacy helpers — description only, no structured check_id.
+# Kept for backwards compatibility with downstream callers; emit results with
+# an empty check_id so report.sh falls back to "no rationale available".
+pass()  { echo "  [PASS] $*"; PASS=$((PASS+1)); RESULTS+=("PASS||$*"); }
+warn()  { echo "  [WARN] $*"; WARN=$((WARN+1)); RESULTS+=("WARN||$*"); }
+fail()  { echo "  [FAIL] $*"; FAIL=$((FAIL+1)); RESULTS+=("FAIL||$*"); }
+skip()  { echo "  [SKIP] $*"; SKIP=$((SKIP+1)); RESULTS+=("SKIP||$*"); }
+
+# Structured helpers — first arg is check_id (must match findings-catalog.json),
+# remaining args are the human-readable description. Use these for new checks
+# so report.sh can render proper Findings detail blocks.
+passx() { local id="$1"; shift; echo "  [PASS] $*"; PASS=$((PASS+1)); RESULTS+=("PASS|${id}|$*"); }
+warnx() { local id="$1"; shift; echo "  [WARN] $*"; WARN=$((WARN+1)); RESULTS+=("WARN|${id}|$*"); }
+failx() { local id="$1"; shift; echo "  [FAIL] $*"; FAIL=$((FAIL+1)); RESULTS+=("FAIL|${id}|$*"); }
+skipx() { local id="$1"; shift; echo "  [SKIP] $*"; SKIP=$((SKIP+1)); RESULTS+=("SKIP|${id}|$*"); }
+
+export -f pass warn fail skip passx warnx failx skipx
 export PASS WARN FAIL SKIP
 
 log "======================================"
@@ -76,6 +101,9 @@ log "======================================"
 "${SCRIPT_DIR}/report/report.sh" \
   --pass "$PASS" --warn "$WARN" --fail "$FAIL" --skip "$SKIP" \
   --output "$REPORT_BASE" \
-  --results "$(printf '%s\n' "${RESULTS[@]}")" 2>/dev/null || true
+  --report-dir "$REPORT_DIR" \
+  --state-dir "$STATE_DIR" \
+  --catalog "$SCRIPT_DIR/findings-catalog.json" \
+  --results "$(printf '%s\n' "${RESULTS[@]}")" || true
 
 log "Reports written to: $REPORT_BASE.md and $REPORT_BASE.json"

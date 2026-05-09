@@ -6,47 +6,47 @@
 log "SI-2: Flaw remediation"
 SECURITY_UPDATES=$(platform pending_security_updates_count)
 if [[ "$SECURITY_UPDATES" -eq 0 ]]; then
-  pass "SI-2: No pending security updates"
+  passx "SI-2-security-updates-low" "SI-2: No pending security updates"
 elif [[ "$SECURITY_UPDATES" -le 3 ]]; then
-  warn "SI-2: $SECURITY_UPDATES security updates pending — apply soon"
+  warnx "SI-2-security-updates-low" "SI-2: $SECURITY_UPDATES security updates pending — apply soon"
 else
-  fail "SI-2: $SECURITY_UPDATES security updates pending — apply immediately"
+  failx "SI-2-security-updates-high" "SI-2: $SECURITY_UPDATES security updates pending — apply immediately"
 fi
 
 # SI-2: Kernel version check
 log "SI-2: Kernel currency"
 KERNEL=$(uname -r)
-pass "SI-2: Running kernel: $KERNEL (manual review recommended for currency)"
+passx "SI-2-security-updates-low" "SI-2: Running kernel: $KERNEL (manual review recommended for currency)"
 
 # SI-3: Malicious code protection
 log "SI-3: Malicious code protection"
 if platform clamav_installed; then
-  pass "SI-3: ClamAV is installed"
+  passx "SI-3-clamav-not-installed" "SI-3: ClamAV is installed"
   if platform service_active clamav-daemon; then
-    pass "SI-3: ClamAV daemon is running"
+    passx "SI-3-clamav-daemon-stopped" "SI-3: ClamAV daemon is running"
   else
-    warn "SI-3: ClamAV installed but daemon not running — consider enabling for real-time protection"
+    warnx "SI-3-clamav-daemon-stopped" "SI-3: ClamAV installed but daemon not running — consider enabling for real-time protection"
   fi
   if platform service_active clamav-freshclam; then
-    pass "SI-3: ClamAV signature updater (freshclam) is running"
+    passx "SI-3-freshclam-stopped" "SI-3: ClamAV signature updater (freshclam) is running"
   else
-    warn "SI-3: freshclam not running — ClamAV signatures may be outdated"
+    warnx "SI-3-freshclam-stopped" "SI-3: freshclam not running — ClamAV signatures may be outdated"
   fi
 else
-  warn "SI-3: ClamAV not installed — consider installing for malware detection: sudo apt install clamav"
+  warnx "SI-3-clamav-not-installed" "SI-3: ClamAV not installed — consider installing for malware detection: sudo apt install clamav"
 fi
 
 # SI-2/SI-3: fail2ban (intrusion/brute-force protection)
 log "SI-2/SI-3: Brute force protection"
 if platform service_active fail2ban; then
-  pass "SI-3: fail2ban is running"
+  passx "SI-3-fail2ban-not-running" "SI-3: fail2ban is running"
   F2B_STATUS=$(platform fail2ban_status)
   if [[ -n "$F2B_STATUS" ]]; then
     JAILS=$(echo "$F2B_STATUS" | grep "Jail list" | sed 's/.*Jail list:\s*//')
-    pass "SI-3: fail2ban active jails: ${JAILS:-none listed}"
+    passx "SI-3-fail2ban-not-running" "SI-3: fail2ban active jails: ${JAILS:-none listed}"
   fi
 else
-  fail "SI-3: fail2ban is not running — run harden-fail2ban.sh to configure"
+  failx "SI-3-fail2ban-not-running" "SI-3: fail2ban is not running — run harden-fail2ban.sh to configure"
 fi
 
 # SI-7: Software integrity — verify Sarge script checksums if available
@@ -55,10 +55,10 @@ SARGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECKSUM_FILE="$SARGE_DIR/CHECKSUMS.sha256"
 if [[ -f "$CHECKSUM_FILE" ]]; then
   if (cd "$SARGE_DIR" && platform verify_checksums "$CHECKSUM_FILE"); then
-    pass "SI-7: Sarge script checksums verified"
+    passx "SI-7-checksum-mismatch" "SI-7: Sarge script checksums verified"
   else
-    fail "SI-7: Sarge script checksum verification FAILED — scripts may have been modified"
+    failx "SI-7-checksum-mismatch" "SI-7: Sarge script checksum verification FAILED — scripts may have been modified"
   fi
 else
-  skip "SI-7: No CHECKSUMS.sha256 file found — generate with: sha256sum scripts/*.sh assessment/**/*.sh > CHECKSUMS.sha256"
+  skipx "SI-7-checksum-mismatch" "SI-7: No CHECKSUMS.sha256 file found — generate with: sha256sum scripts/*.sh assessment/**/*.sh > CHECKSUMS.sha256"
 fi
