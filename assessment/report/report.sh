@@ -199,11 +199,11 @@ render_finding_block() {
 
   local heading
   if [[ -n "$family" ]]; then
-    heading="### ${heading_prefix} ${family}"
+    heading="#### ${heading_prefix} ${family}"
   elif [[ -n "$check_id" ]]; then
-    heading="### ${heading_prefix} ${check_id}"
+    heading="#### ${heading_prefix} ${check_id}"
   else
-    heading="### ${heading_prefix} (no check_id)"
+    heading="#### ${heading_prefix} (no check_id)"
   fi
   echo "$heading"
   echo ""
@@ -267,7 +267,7 @@ INSTALL_DATE_HUMAN="$INSTALLED_AT"
   fi
 
   if [[ ${#FAIL_LINES[@]} -gt 0 ]]; then
-    echo "## ❌ Failures (${#FAIL_LINES[@]})"
+    echo "### ❌ Failures (${#FAIL_LINES[@]})"
     echo ""
     for line in "${FAIL_LINES[@]}"; do
       render_finding_block "❌" "$line"
@@ -275,7 +275,7 @@ INSTALL_DATE_HUMAN="$INSTALLED_AT"
   fi
 
   if [[ ${#WARN_LINES[@]} -gt 0 ]]; then
-    echo "## ⚠️ Warnings (${#WARN_LINES[@]})"
+    echo "### ⚠️ Warnings (${#WARN_LINES[@]})"
     echo ""
     for line in "${WARN_LINES[@]}"; do
       render_finding_block "⚠️" "$line"
