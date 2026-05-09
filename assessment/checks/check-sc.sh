@@ -1,30 +1,28 @@
 #!/usr/bin/env bash
 # check-sc.sh — System & Communications Protection (SC) — partial — NIST 800-53 Rev 5
+# Platform-specific data acquisition lives in lib/platforms/<os>.sh.
 
 # SC-8: Transmission Confidentiality — check for TLS on gateway port
 log "SC-8: Transmission confidentiality"
 GW_PORT="${OPENCLAW_GATEWAY_PORT:-18790}"
-if command -v ss &>/dev/null; then
-  LISTENING=$(ss -tlnp 2>/dev/null | grep ":${GW_PORT}" || echo "")
-  if [[ -n "$LISTENING" ]]; then
-    pass "SC-8: OpenClaw gateway is listening on port $GW_PORT"
-    # Check if Cloudflare tunnel is the access path (preferred over direct TLS)
-    if pgrep -x "cloudflared" &>/dev/null; then
-      pass "SC-8: cloudflared is running — Cloudflare Tunnel provides TLS termination"
-    else
-      warn "SC-8: cloudflared not detected — verify TLS is configured on gateway directly"
-    fi
+if platform port_listening "$GW_PORT"; then
+  pass "SC-8: OpenClaw gateway is listening on port $GW_PORT"
+  # Check if Cloudflare tunnel is the access path (preferred over direct TLS)
+  if pgrep -x "cloudflared" &>/dev/null; then
+    pass "SC-8: cloudflared is running — Cloudflare Tunnel provides TLS termination"
   else
-    skip "SC-8: OpenClaw gateway port $GW_PORT not detected — may be using different port"
+    warn "SC-8: cloudflared not detected — verify TLS is configured on gateway directly"
   fi
+else
+  skip "SC-8: OpenClaw gateway port $GW_PORT not detected — may be using different port"
 fi
 
 # SC-28: Protection at rest — OpenClaw config permissions
 log "SC-28: Protection of information at rest"
 OC_CONFIG="$HOME/.openclaw/config.json"
 if [[ -f "$OC_CONFIG" ]]; then
-  CONFIG_PERM=$(stat -c "%a" "$OC_CONFIG")
-  CONFIG_OWNER=$(stat -c "%U" "$OC_CONFIG")
+  CONFIG_PERM=$(platform file_perm "$OC_CONFIG")
+  CONFIG_OWNER=$(platform file_owner "$OC_CONFIG")
   if [[ "$CONFIG_PERM" == "600" || "$CONFIG_PERM" == "400" ]]; then
     pass "SC-28: OpenClaw config.json is $CONFIG_PERM (restricted)"
   else
@@ -44,7 +42,7 @@ fi
 log "SC-28: World-readable sensitive files"
 OC_DIR="$HOME/.openclaw"
 if [[ -d "$OC_DIR" ]]; then
-  WORLD_READABLE=$(find "$OC_DIR" -type f -perm /004 2>/dev/null | head -10)
+  WORLD_READABLE=$(platform world_readable_files_in "$OC_DIR")
   if [[ -z "$WORLD_READABLE" ]]; then
     pass "SC-28: No world-readable files in ~/.openclaw"
   else

@@ -23,6 +23,11 @@ if [[ "$SARGE_OS" != "ubuntu" ]]; then
   exit 2
 fi
 
+# Load platform helper dispatch — checks call `platform <probe>` instead of
+# inline platform-specific commands.
+# shellcheck source=../lib/platforms/_dispatch.sh
+source "${REPO_ROOT}/lib/platforms/_dispatch.sh"
+
 REPORT_DIR="${SARGE_REPORT_DIR:-$HOME/.sarge/reports}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_BASE="${REPORT_DIR}/sarge-report-${TIMESTAMP}"
