@@ -52,8 +52,10 @@ OC_DIR="$TARGET_HOME/.openclaw"
 if [[ -d "$OC_DIR" ]]; then
   chmod 700 "$OC_DIR"
   echo "  Set $OC_DIR → 700"
-  mkdir -p "$OC_DIR/secrets" && chmod 700 "$OC_DIR/secrets" && echo "  Set $OC_DIR/secrets → 700"
-  find "$OC_DIR/secrets" -type f -exec chmod 600 {} \; 2>/dev/null && echo "  Set secret files → 600"
+  if [[ -d "$OC_DIR/secrets" ]]; then
+    chmod 700 "$OC_DIR/secrets" && echo "  Set $OC_DIR/secrets → 700"
+    find "$OC_DIR/secrets" -type f -exec chmod 600 {} \; 2>/dev/null && echo "  Set secret files → 600"
+  fi
   [[ -f "$OC_DIR/config.json" ]] && chmod 600 "$OC_DIR/config.json" && echo "  Set config.json → 600"
 fi
 echo "[Sarge] Permissions hardening applied."
