@@ -3,7 +3,7 @@
 # Sourced by assessment, hardening, and drift scripts.
 #
 # Exports:
-#   SARGE_OS              "ubuntu" | "macos" | "unsupported"
+#   SARGE_OS              "ubuntu" | "macos" | "windows" | "unsupported"
 #   SARGE_OS_VERSION      version string (e.g. "24.04", "14.5")
 #   SARGE_OS_DESCRIPTION  human-readable identifier (e.g. "Ubuntu 24.04 LTS")
 #
@@ -42,6 +42,15 @@ case "$_sarge_uname_s" in
     SARGE_OS_VERSION=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
     SARGE_OS_DESCRIPTION="macOS ${SARGE_OS_VERSION}"
     ;;
+  CYGWIN*|MINGW*|MSYS*|Windows_NT)
+    # Windows path covers Git Bash / MSYS / Cygwin / WSL-shim invocations.
+    # Native Windows users invoke assess.ps1 directly; this branch exists so
+    # bash-side scripts sourced under Git Bash get a clean SARGE_OS=windows
+    # rather than "unsupported" and so future bash dispatchers can hand off.
+    SARGE_OS="windows"
+    SARGE_OS_VERSION=$(uname -r 2>/dev/null || echo "unknown")
+    SARGE_OS_DESCRIPTION="Windows (${_sarge_uname_s} ${SARGE_OS_VERSION})"
+    ;;
   *)
     SARGE_OS="unsupported"
     SARGE_OS_VERSION="unknown"
@@ -70,6 +79,14 @@ _sarge_is_supported_version() {
       [[ -n "$SARGE_OS_VERSION" && "$SARGE_OS_VERSION" != "unknown" ]] && return 0
       return 1
       ;;
+    windows)
+      # Permissive — any Windows version detected via Git Bash / MSYS / WSL.
+      # Mirrors the macOS rationale: Windows is a developer surface here, and
+      # the real per-control checks land in assess.ps1 (PowerShell) where we
+      # can probe edition + build precisely. Tighten only if a specific
+      # Windows version proves incompatible.
+      return 0
+      ;;
     *) return 1 ;;
   esac
 }
@@ -80,6 +97,7 @@ sarge_require_supported_os() {
     echo "[Sarge] Sarge supports:" >&2
     echo "  - Ubuntu 22.04 / 24.04 LTS  (full coverage)" >&2
     echo "  - macOS                     (in progress — see roadmap)" >&2
+    echo "  - Windows                   (detection-only via assess.ps1 — see roadmap)" >&2
     echo "[Sarge] Roadmap: https://github.com/oscarsixsecllc/sarge/issues" >&2
     exit 2
   fi
