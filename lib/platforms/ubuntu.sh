@@ -152,7 +152,7 @@ ubuntu_faillock_value() {
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", rhs)
       if (lhs == key) { print rhs; exit }
     }
-  ' /etc/security/faillock.conf 2>/dev/null
+  ' "$(ubuntu_faillock_config_path)" 2>/dev/null
 }
 
 # First non-comment TMOUT line found in profile files. Empty if none.
