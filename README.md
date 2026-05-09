@@ -86,6 +86,8 @@ On a clean Ubuntu 24.04 LTS system with Sarge hardening applied:
 
 The 4 remaining FAILs (auditd daemon, pam_faillock, fail2ban) require systemd and will pass on a standard Linux VM.
 
+> **Testing in containers — known limitation.** When running `scripts/install.sh` inside a default Docker container (PID 1 = `bash`/`sleep`, no systemd), only `harden-permissions` and `harden-pam` will apply — the other 4 modules error at `systemctl is-system-running`. To exercise the full install flow in a container, start it with systemd as PID 1 (`docker run --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /run -e container=docker <image> /sbin/init`), or use a real VM (multipass / vagrant / lima). Validation runs against a standard Ubuntu 24.04 LTS VM, not a container.
+
 > **macOS validation pending.** The numbers above are Ubuntu 24.04 only. macOS gap-analysis and hardening modules are landing PR-by-PR; each module will publish its own validated PASS/WARN/FAIL counts as it ships.
 
 ---
