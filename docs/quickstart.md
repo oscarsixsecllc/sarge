@@ -3,7 +3,7 @@
 ## Prerequisites
 - One of:
   - Ubuntu 22.04 or 24.04 LTS (x86_64 or arm64) — full coverage
-  - macOS — file-permission hardening today; assess / drift / additional hardening modules rolling out across PRs
+  - macOS — gap analysis and drift detection now run natively; controls with no macOS analog (auditd, pam_faillock, pwquality, apt, clamav, fail2ban) emit SKIP with a platform-aware rationale. `scripts/install.sh` applies file-permission hardening only; native firewall/SSH/logging hardening modules are rolling out per-PR.
 - OpenClaw installed
 - Git
 

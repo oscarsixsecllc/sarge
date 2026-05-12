@@ -12,16 +12,21 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${REPO_ROOT}/lib/platform.sh"
 sarge_require_supported_os
 
-# Assessment checks are currently Ubuntu-only. macOS-aware probes ship in a
-# follow-up PR — until then, refuse on non-Ubuntu rather than emit garbage
-# results. Exit 2 is deliberate (not exit 0): assess is a measurement tool, so
-# a silent exit 0 could be misread by CI as "no NIST gaps found." See the
-# "Script Exit Codes" section in README.md for the full per-script contract.
-if [[ "$SARGE_OS" != "ubuntu" ]]; then
-  echo "[Sarge] Gap analysis on ${SARGE_OS_DESCRIPTION} is not yet implemented." >&2
-  echo "[Sarge] Track the rollout: https://github.com/oscarsixsecllc/sarge/issues" >&2
-  exit 2
-fi
+# Assessment checks dispatch through lib/platforms/<os>.sh; controls that
+# have no native analog on the active platform emit a clean skipx with a
+# platform-aware rationale (see check-au.sh / check-ia.sh / check-cm.sh /
+# check-si.sh). For platforms outside the support matrix we still refuse
+# with exit 2 — assess is a measurement tool, so a silent exit 0 on an
+# unsupported platform could be misread by CI as "no NIST gaps found."
+# See the "Script Exit Codes" section in README.md for the full contract.
+case "$SARGE_OS" in
+  ubuntu|macos) ;;
+  *)
+    echo "[Sarge] Gap analysis on ${SARGE_OS_DESCRIPTION} is not yet implemented." >&2
+    echo "[Sarge] Track the rollout: https://github.com/oscarsixsecllc/sarge/issues" >&2
+    exit 2
+    ;;
+esac
 
 # Load platform helper dispatch — checks call `platform <probe>` instead of
 # inline platform-specific commands.
@@ -77,7 +82,7 @@ log " Sarge NIST 800-53 Gap Analysis"
 log " Oscar Six Security LLC"
 log " $(date)"
 log " Host: $(hostname)"
-log " OS: $(lsb_release -sd 2>/dev/null || uname -a)"
+log " OS: ${SARGE_OS_DESCRIPTION}"
 log "======================================"
 echo ""
 

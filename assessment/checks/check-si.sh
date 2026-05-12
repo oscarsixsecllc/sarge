@@ -4,13 +4,17 @@
 
 # SI-2: Flaw Remediation — package updates
 log "SI-2: Flaw remediation"
-SECURITY_UPDATES=$(platform pending_security_updates_count)
-if [[ "$SECURITY_UPDATES" -eq 0 ]]; then
-  passx "SI-2-security-updates-low" "SI-2: No pending security updates"
-elif [[ "$SECURITY_UPDATES" -le 3 ]]; then
-  warnx "SI-2-security-updates-low" "SI-2: $SECURITY_UPDATES security updates pending — apply soon"
+if ! platform_supports pending_security_updates_count; then
+  skipx "SI-2-security-updates-low" "SI-2: pending security-update counting via apt is not applicable on ${SARGE_OS_DESCRIPTION}; review 'softwareupdate --list' or MDM compliance reports"
 else
-  failx "SI-2-security-updates-high" "SI-2: $SECURITY_UPDATES security updates pending — apply immediately"
+  SECURITY_UPDATES=$(platform pending_security_updates_count)
+  if [[ "$SECURITY_UPDATES" -eq 0 ]]; then
+    passx "SI-2-security-updates-low" "SI-2: No pending security updates"
+  elif [[ "$SECURITY_UPDATES" -le 3 ]]; then
+    warnx "SI-2-security-updates-low" "SI-2: $SECURITY_UPDATES security updates pending — apply soon"
+  else
+    failx "SI-2-security-updates-high" "SI-2: $SECURITY_UPDATES security updates pending — apply immediately"
+  fi
 fi
 
 # SI-2: Kernel version check
@@ -20,7 +24,9 @@ passx "SI-2-security-updates-low" "SI-2: Running kernel: $KERNEL (manual review 
 
 # SI-3: Malicious code protection
 log "SI-3: Malicious code protection"
-if platform clamav_installed; then
+if ! platform_supports clamav_installed; then
+  skipx "SI-3-clamav-not-installed" "SI-3: macOS ships XProtect + Gatekeeper + Notarization as built-in malware protection; no third-party scanner required"
+elif platform clamav_installed; then
   passx "SI-3-clamav-not-installed" "SI-3: ClamAV is installed"
   if platform service_active clamav-daemon; then
     passx "SI-3-clamav-daemon-stopped" "SI-3: ClamAV daemon is running"
@@ -38,7 +44,9 @@ fi
 
 # SI-2/SI-3: fail2ban (intrusion/brute-force protection)
 log "SI-2/SI-3: Brute force protection"
-if platform service_active fail2ban; then
+if ! platform_supports fail2ban_status; then
+  skipx "SI-3-fail2ban-not-running" "SI-3: fail2ban has no native macOS analog; rate-limiting for SSH/remote services is delegated to the firewall (socketfilterfw / pf) or upstream appliance"
+elif platform service_active fail2ban; then
   passx "SI-3-fail2ban-not-running" "SI-3: fail2ban is running"
   F2B_STATUS=$(platform fail2ban_status)
   if [[ -n "$F2B_STATUS" ]]; then
