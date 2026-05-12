@@ -47,3 +47,12 @@ platform() {
   fi
   return 127
 }
+
+# 0 if the active platform implements <probe>, nonzero otherwise. Lets
+# control checks distinguish "probe ran and said no" from "probe doesn't
+# exist on this OS" — the latter routes to a skipx with a platform-aware
+# rationale instead of a misleading failx. Cheaper than calling the probe
+# and inspecting exit code 127, and side-effect free.
+platform_supports() {
+  declare -F "${SARGE_OS}_$1" &>/dev/null
+}

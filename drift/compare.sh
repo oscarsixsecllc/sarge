@@ -8,18 +8,41 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../lib/platform.sh
 source "${REPO_ROOT}/lib/platform.sh"
 sarge_require_supported_os
-sarge_require_os ubuntu
+sarge_require_os ubuntu macos
+
+# shellcheck source=../lib/platforms/_dispatch.sh
+source "${REPO_ROOT}/lib/platforms/_dispatch.sh"
 
 SNAPSHOT_DIR="${SARGE_SNAPSHOT_DIR:-$HOME/.sarge/snapshots}"
 LATEST="$SNAPSHOT_DIR/latest.json"
 
 [[ -f "$LATEST" ]] || { echo "[Sarge] No snapshot found. Run snapshot.sh first."; exit 1; }
 
+# The platform's drift_check_fields function calls this helper for each
+# field it knows about. Reads the baseline value out of the snapshot JSON
+# via a python one-liner (python3 is on every supported platform); falls
+# back to top-level keys for snapshots produced before the "fields"
+# nesting was introduced. The Python snippet swallows its own errors and
+# the assignment is guarded with `|| true` so that a missing python3, an
+# unreadable snapshot, or malformed JSON degrades gracefully (one field
+# reported as drift against "unknown") instead of aborting under set -e.
 DRIFT=0
 check() {
   local field="$1" current="$2"
   local baseline
-  baseline=$(python3 -c "import json,sys; d=json.load(open('$LATEST')); print(d.get('$field','unknown'))" 2>/dev/null || echo "unknown")
+  baseline=$(python3 - "$LATEST" "$field" <<'PY' 2>/dev/null
+import json, sys
+try:
+    path, field = sys.argv[1], sys.argv[2]
+    with open(path) as fh:
+        data = json.load(fh)
+    fields = data.get("fields", data)
+    print(fields.get(field, "unknown"))
+except Exception:
+    print("unknown")
+PY
+) || true
+  baseline=${baseline:-unknown}
   if [[ "$current" == "$baseline" ]]; then
     echo "  [OK]   $field: $current"
   else
@@ -28,12 +51,15 @@ check() {
   fi
 }
 
-echo "[Sarge] Drift Detection — comparing against $(stat -c '%y' "$LATEST" | cut -d. -f1)"
-check "ufw_status"        "$(ufw status 2>/dev/null | head -1 || echo unknown)"
-check "auditd_active"     "$(systemctl is-active auditd 2>/dev/null || echo unknown)"
-check "fail2ban_active"   "$(systemctl is-active fail2ban 2>/dev/null || echo unknown)"
-check "openclaw_dir_perm" "$(stat -c '%a' $HOME/.openclaw 2>/dev/null || echo unknown)"
-check "pass_max_days"     "$(grep ^PASS_MAX_DAYS /etc/login.defs 2>/dev/null | awk '{print $2}' || echo unknown)"
+# stat -c (GNU) and stat -f (BSD) disagree on flags; pick the right one
+# for the timestamp display only — no functional impact on drift logic.
+if SNAP_MTIME=$(stat -c '%y' "$LATEST" 2>/dev/null); then
+  SNAP_MTIME=${SNAP_MTIME%.*}
+else
+  SNAP_MTIME=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$LATEST" 2>/dev/null || echo "unknown")
+fi
+echo "[Sarge] Drift Detection — comparing against ${SNAP_MTIME}"
+platform drift_check_fields
 
 echo ""
 if [[ "$DRIFT" -eq 0 ]]; then

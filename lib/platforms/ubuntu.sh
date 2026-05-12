@@ -107,6 +107,26 @@ ubuntu_pending_security_updates_count() {
 ubuntu_service_active()  { systemctl is-active  --quiet "$1" 2>/dev/null; }
 ubuntu_service_enabled() { systemctl is-enabled --quiet "$1" 2>/dev/null; }
 
+# CM-7 inventory of legacy Unix services Sarge knows how to flag. Defined
+# as a platform probe (rather than hardcoded in check-cm.sh) so non-Linux
+# platforms — where these systemd unit names don't map to native service
+# labels — can skip the section cleanly via platform_supports rather than
+# emit misleading "telnet is not running" PASSes for a control surface
+# that doesn't exist on the host.
+ubuntu_linux_legacy_service_names() {
+  cat <<NAMES
+telnet
+rsh
+rlogin
+vsftpd
+pure-ftpd
+proftpd
+xinetd
+cups
+avahi-daemon
+NAMES
+}
+
 # 0 if the SSH server is active under either of its common unit names.
 ubuntu_sshd_active() {
   systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null
@@ -178,3 +198,70 @@ ubuntu_fail2ban_status() {
 # 0 if the checksum file verifies against the working directory.
 # Caller is responsible for `cd`'ing to the repo root before calling.
 ubuntu_verify_checksums() { sha256sum --check "$1" --quiet 2>/dev/null; }
+
+# ---------- Drift (CM-2) ----------
+#
+# Emits the platform-specific "fields" block consumed by drift/snapshot.sh
+# and drift/compare.sh. Same key list the pre-platforms snapshot used, so
+# operators with existing snapshots see no drift after upgrade.
+#
+# Capture pattern: `var=$(cmd) || true; echo "k=${var:-unknown}"`.
+# Two correctness properties this guards:
+#   1. `systemctl is-active` exits non-zero when a unit is inactive/failed
+#      but prints the meaningful state ("inactive", "failed") on stdout.
+#      An inline `... || echo unknown` would *append* "unknown" to that
+#      stdout (giving a literal "inactive\nunknown" capture that breaks
+#      JSON); a trailing `|| var=""` would overwrite the captured signal.
+#      `|| true` short-circuits set -e without touching the variable.
+#   2. Pipelines like `cmd | head -1 || echo unknown` don't trigger the
+#      fallback when the *left* side fails — without `pipefail` the
+#      pipeline exit is from head (zero on empty stdin). Capture-then-
+#      default sidesteps that entirely.
+_ubuntu_drift_fields() {
+  local ufw auditd f2b perm pmd
+  ufw=$(ufw status 2>/dev/null | head -1) || true
+  auditd=$(systemctl is-active auditd 2>/dev/null) || true
+  f2b=$(systemctl is-active fail2ban 2>/dev/null) || true
+  perm=$(stat -c '%a' "$HOME/.openclaw" 2>/dev/null) || true
+  pmd=$(grep ^PASS_MAX_DAYS /etc/login.defs 2>/dev/null | awk '{print $2}') || true
+  echo "ufw_status=${ufw:-unknown}"
+  echo "auditd_active=${auditd:-unknown}"
+  echo "fail2ban_active=${f2b:-unknown}"
+  echo "openclaw_dir_perm=${perm:-unknown}"
+  echo "pass_max_days=${pmd:-unknown}"
+}
+
+# Emit the JSON object body (no surrounding braces) for the Ubuntu
+# snapshot. Each line is `"key": "value",` except the last has no
+# trailing comma — strict JSON, no jq dependency.
+ubuntu_drift_snapshot_fields() {
+  local lines=()
+  local pair k v
+  while IFS= read -r pair; do
+    [[ -z "$pair" ]] && continue
+    k="${pair%%=*}"
+    v="${pair#*=}"
+    lines+=("    \"$k\": \"$v\"")
+  done < <(_ubuntu_drift_fields)
+  local n=${#lines[@]} i=0
+  while [[ $i -lt $n ]]; do
+    if [[ $i -lt $((n - 1)) ]]; then
+      printf '%s,\n' "${lines[$i]}"
+    else
+      printf '%s\n' "${lines[$i]}"
+    fi
+    i=$((i + 1))
+  done
+}
+
+# Run the platform-specific drift comparisons. Caller (compare.sh) must
+# have defined `check <field> <current-value>` in scope before invoking.
+ubuntu_drift_check_fields() {
+  local pair k v
+  while IFS= read -r pair; do
+    [[ -z "$pair" ]] && continue
+    k="${pair%%=*}"
+    v="${pair#*=}"
+    check "$k" "$v"
+  done < <(_ubuntu_drift_fields)
+}
