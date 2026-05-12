@@ -22,20 +22,27 @@ LATEST="$SNAPSHOT_DIR/latest.json"
 # field it knows about. Reads the baseline value out of the snapshot JSON
 # via a python one-liner (python3 is on every supported platform); falls
 # back to top-level keys for snapshots produced before the "fields"
-# nesting was introduced.
+# nesting was introduced. The Python snippet swallows its own errors and
+# the assignment is guarded with `|| true` so that a missing python3, an
+# unreadable snapshot, or malformed JSON degrades gracefully (one field
+# reported as drift against "unknown") instead of aborting under set -e.
 DRIFT=0
 check() {
   local field="$1" current="$2"
   local baseline
-  baseline=$(python3 - "$LATEST" "$field" <<'PY'
+  baseline=$(python3 - "$LATEST" "$field" <<'PY' 2>/dev/null
 import json, sys
-path, field = sys.argv[1], sys.argv[2]
-with open(path) as fh:
-    data = json.load(fh)
-fields = data.get("fields", data)
-print(fields.get(field, "unknown"))
+try:
+    path, field = sys.argv[1], sys.argv[2]
+    with open(path) as fh:
+        data = json.load(fh)
+    fields = data.get("fields", data)
+    print(fields.get(field, "unknown"))
+except Exception:
+    print("unknown")
 PY
-)
+) || true
+  baseline=${baseline:-unknown}
   if [[ "$current" == "$baseline" ]]; then
     echo "  [OK]   $field: $current"
   else

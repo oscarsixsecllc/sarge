@@ -204,12 +204,31 @@ ubuntu_verify_checksums() { sha256sum --check "$1" --quiet 2>/dev/null; }
 # Emits the platform-specific "fields" block consumed by drift/snapshot.sh
 # and drift/compare.sh. Same key list the pre-platforms snapshot used, so
 # operators with existing snapshots see no drift after upgrade.
+#
+# Capture pattern: `var=$(cmd) || true; echo "k=${var:-unknown}"`.
+# Two correctness properties this guards:
+#   1. `systemctl is-active` exits non-zero when a unit is inactive/failed
+#      but prints the meaningful state ("inactive", "failed") on stdout.
+#      An inline `... || echo unknown` would *append* "unknown" to that
+#      stdout (giving a literal "inactive\nunknown" capture that breaks
+#      JSON); a trailing `|| var=""` would overwrite the captured signal.
+#      `|| true` short-circuits set -e without touching the variable.
+#   2. Pipelines like `cmd | head -1 || echo unknown` don't trigger the
+#      fallback when the *left* side fails — without `pipefail` the
+#      pipeline exit is from head (zero on empty stdin). Capture-then-
+#      default sidesteps that entirely.
 _ubuntu_drift_fields() {
-  echo "ufw_status=$(ufw status 2>/dev/null | head -1 || echo unknown)"
-  echo "auditd_active=$(systemctl is-active auditd 2>/dev/null || echo unknown)"
-  echo "fail2ban_active=$(systemctl is-active fail2ban 2>/dev/null || echo unknown)"
-  echo "openclaw_dir_perm=$(stat -c '%a' "$HOME/.openclaw" 2>/dev/null || echo unknown)"
-  echo "pass_max_days=$(grep ^PASS_MAX_DAYS /etc/login.defs 2>/dev/null | awk '{print $2}' || echo unknown)"
+  local ufw auditd f2b perm pmd
+  ufw=$(ufw status 2>/dev/null | head -1) || true
+  auditd=$(systemctl is-active auditd 2>/dev/null) || true
+  f2b=$(systemctl is-active fail2ban 2>/dev/null) || true
+  perm=$(stat -c '%a' "$HOME/.openclaw" 2>/dev/null) || true
+  pmd=$(grep ^PASS_MAX_DAYS /etc/login.defs 2>/dev/null | awk '{print $2}') || true
+  echo "ufw_status=${ufw:-unknown}"
+  echo "auditd_active=${auditd:-unknown}"
+  echo "fail2ban_active=${f2b:-unknown}"
+  echo "openclaw_dir_perm=${perm:-unknown}"
+  echo "pass_max_days=${pmd:-unknown}"
 }
 
 # Emit the JSON object body (no surrounding braces) for the Ubuntu

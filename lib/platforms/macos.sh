@@ -211,24 +211,34 @@ macos_verify_checksums() { shasum -a 256 -c "$1" --quiet 2>/dev/null; }
 # ---------- Drift (CM-2) ----------
 #
 # Emits the platform-specific "fields" block consumed by drift/snapshot.sh
-# and drift/compare.sh. One JSON key:value pair per array entry; the
-# wrapper handles comma joining so individual probes don't have to
-# track which one is last.
+# and drift/compare.sh. One key=value pair per line; the snapshot writer
+# wraps these into a JSON object.
+#
+# Capture pattern: `var=$(cmd) || true; echo "k=${var:-default}"`. See
+# the rationale comment on _ubuntu_drift_fields — same correctness
+# concerns apply (pipefail-less pipelines, signal-bearing exit codes
+# from grep/awk when there's no match).
 _macos_drift_fields() {
-  local fw
-  fw=$(macos_firewall_status_text 2>/dev/null | head -1 | tr -d '\n')
-  echo "firewall_status=${fw:-unknown}"
-  echo "openclaw_dir_perm=$(stat -f '%A' "$HOME/.openclaw" 2>/dev/null || echo unknown)"
-  echo "sshd_active=$(launchctl print system/com.openssh.sshd &>/dev/null && echo active || echo inactive)"
-  local sshd_conf="/etc/ssh/sshd_config"
-  if [[ -r "$sshd_conf" ]]; then
-    echo "ssh_permit_root_login=$(grep -iE '^PermitRootLogin' "$sshd_conf" 2>/dev/null | awk '{print $2}' | head -1 || echo unset)"
-    echo "ssh_password_auth=$(grep -iE '^PasswordAuthentication' "$sshd_conf" 2>/dev/null | awk '{print $2}' | head -1 || echo unset)"
+  local fw perm sshd_state sshd_conf permit_root pw_auth sip
+  fw=$(macos_firewall_status_text 2>/dev/null | head -1 | tr -d '\n') || true
+  perm=$(stat -f '%A' "$HOME/.openclaw" 2>/dev/null) || true
+  if launchctl print system/com.openssh.sshd &>/dev/null; then
+    sshd_state="active"
   else
-    echo "ssh_permit_root_login=unset"
-    echo "ssh_password_auth=unset"
+    sshd_state="inactive"
   fi
-  echo "system_integrity_protection=$(csrutil status 2>/dev/null | awk -F': ' '/status:/{print $2}' | tr -d '.' || echo unknown)"
+  sshd_conf="/etc/ssh/sshd_config"
+  if [[ -r "$sshd_conf" ]]; then
+    permit_root=$(grep -iE '^PermitRootLogin' "$sshd_conf" 2>/dev/null | awk '{print $2}' | head -1) || true
+    pw_auth=$(grep -iE '^PasswordAuthentication' "$sshd_conf" 2>/dev/null | awk '{print $2}' | head -1) || true
+  fi
+  sip=$(csrutil status 2>/dev/null | awk -F': ' '/status:/{print $2}' | tr -d '.') || true
+  echo "firewall_status=${fw:-unknown}"
+  echo "openclaw_dir_perm=${perm:-unknown}"
+  echo "sshd_active=${sshd_state}"
+  echo "ssh_permit_root_login=${permit_root:-unset}"
+  echo "ssh_password_auth=${pw_auth:-unset}"
+  echo "system_integrity_protection=${sip:-unknown}"
 }
 
 # Emit the JSON object body (no surrounding braces) for the macOS
