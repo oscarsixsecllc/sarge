@@ -231,37 +231,9 @@ _ubuntu_drift_fields() {
   echo "pass_max_days=${pmd:-unknown}"
 }
 
-# Emit the JSON object body (no surrounding braces) for the Ubuntu
-# snapshot. Each line is `"key": "value",` except the last has no
-# trailing comma — strict JSON, no jq dependency.
-ubuntu_drift_snapshot_fields() {
-  local lines=()
-  local pair k v
-  while IFS= read -r pair; do
-    [[ -z "$pair" ]] && continue
-    k="${pair%%=*}"
-    v="${pair#*=}"
-    lines+=("    \"$k\": \"$v\"")
-  done < <(_ubuntu_drift_fields)
-  local n=${#lines[@]} i=0
-  while [[ $i -lt $n ]]; do
-    if [[ $i -lt $((n - 1)) ]]; then
-      printf '%s,\n' "${lines[$i]}"
-    else
-      printf '%s\n' "${lines[$i]}"
-    fi
-    i=$((i + 1))
-  done
-}
-
-# Run the platform-specific drift comparisons. Caller (compare.sh) must
-# have defined `check <field> <current-value>` in scope before invoking.
-ubuntu_drift_check_fields() {
-  local pair k v
-  while IFS= read -r pair; do
-    [[ -z "$pair" ]] && continue
-    k="${pair%%=*}"
-    v="${pair#*=}"
-    check "$k" "$v"
-  done < <(_ubuntu_drift_fields)
-}
+# Snapshot + compare dispatch entry points. The actual loops live in
+# lib/platforms/_dispatch.sh (sarge_emit_drift_snapshot_json /
+# sarge_emit_drift_check_calls) — these wrappers exist only to satisfy
+# the `platform drift_*_fields` dispatch contract.
+ubuntu_drift_snapshot_fields() { _ubuntu_drift_fields | sarge_emit_drift_snapshot_json; }
+ubuntu_drift_check_fields()    { _ubuntu_drift_fields | sarge_emit_drift_check_calls; }

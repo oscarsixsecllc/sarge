@@ -56,3 +56,53 @@ platform() {
 platform_supports() {
   declare -F "${SARGE_OS}_$1" &>/dev/null
 }
+
+# ---------- Drift field plumbing (shared across platforms) ----------
+#
+# Each platform defines `_<os>_drift_fields` that emits one `key=value`
+# line per field it captures (see lib/platforms/<os>.sh). The two sinks
+# below consume that stream:
+#
+#   _<os>_drift_fields | sarge_emit_drift_snapshot_json
+#   _<os>_drift_fields | sarge_emit_drift_check_calls
+#
+# Living here (not per-platform) because the loops are byte-for-byte
+# identical across platforms — only the field set is platform-specific.
+# Pulling them up means adding a new platform's drift coverage is one
+# function (the field emitter), not three.
+
+# Emit a strict-JSON object body (no surrounding braces) from a stream
+# of `key=value` lines on stdin. Each line becomes `"key": "value",`
+# except the last, which omits the trailing comma. Skips blank lines so
+# field emitters can use empty echos as visual separators if desired.
+sarge_emit_drift_snapshot_json() {
+  local lines=() pair k v
+  while IFS= read -r pair; do
+    [[ -z "$pair" ]] && continue
+    k="${pair%%=*}"
+    v="${pair#*=}"
+    lines+=("    \"$k\": \"$v\"")
+  done
+  local n=${#lines[@]} i=0
+  while [[ $i -lt $n ]]; do
+    if [[ $i -lt $((n - 1)) ]]; then
+      printf '%s,\n' "${lines[$i]}"
+    else
+      printf '%s\n' "${lines[$i]}"
+    fi
+    i=$((i + 1))
+  done
+}
+
+# For each `key=value` line on stdin, invoke `check <key> <value>`. The
+# `check` function must already be defined in the caller's scope (see
+# drift/compare.sh). Unchanged from the per-platform loop it replaces.
+sarge_emit_drift_check_calls() {
+  local pair k v
+  while IFS= read -r pair; do
+    [[ -z "$pair" ]] && continue
+    k="${pair%%=*}"
+    v="${pair#*=}"
+    check "$k" "$v"
+  done
+}
