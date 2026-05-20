@@ -236,4 +236,4 @@ _ubuntu_drift_fields() {
 # sarge_emit_drift_check_calls) — these wrappers exist only to satisfy
 # the `platform drift_*_fields` dispatch contract.
 ubuntu_drift_snapshot_fields() { _ubuntu_drift_fields | sarge_emit_drift_snapshot_json; }
-ubuntu_drift_check_fields()    { _ubuntu_drift_fields | sarge_emit_drift_check_calls; }
+ubuntu_drift_check_fields()    { sarge_emit_drift_check_calls < <(_ubuntu_drift_fields); }
