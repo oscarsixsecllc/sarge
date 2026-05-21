@@ -61,10 +61,20 @@ platform_supports() {
 #
 # Each platform defines `_<os>_drift_fields` that emits one `key=value`
 # line per field it captures (see lib/platforms/<os>.sh). The two sinks
-# below consume that stream:
+# below consume that stream — but the calling convention is asymmetric:
 #
+#   # snapshot: pipe is fine (sink writes stdout only, no shared state)
 #   _<os>_drift_fields | sarge_emit_drift_snapshot_json
-#   _<os>_drift_fields | sarge_emit_drift_check_calls
+#
+#   # check: MUST use process substitution, NOT a pipe
+#   sarge_emit_drift_check_calls < <(_<os>_drift_fields)
+#
+# Why: sarge_emit_drift_check_calls invokes `check`, which is defined in
+# drift/compare.sh and mutates a parent-shell `DRIFT` counter. In bash,
+# pipeline elements run in subshells by default, so a pipe here would
+# drop every DRIFT increment — compare.sh would print `[DRIFT] …` lines
+# but still exit 0 with "No drift detected." Process substitution keeps
+# the while-loop in the caller's shell, preserving the mutation.
 #
 # Living here (not per-platform) because the loops are byte-for-byte
 # identical across platforms — only the field set is platform-specific.

@@ -245,5 +245,11 @@ _macos_drift_fields() {
 # lib/platforms/_dispatch.sh (sarge_emit_drift_snapshot_json /
 # sarge_emit_drift_check_calls) — these wrappers exist only to satisfy
 # the `platform drift_*_fields` dispatch contract.
+#
+# The snapshot wrapper uses a pipe; the check wrapper uses process
+# substitution. They look symmetric but they're not — see the rationale
+# block on sarge_emit_drift_check_calls in _dispatch.sh. tl;dr: `check`
+# mutates a DRIFT counter in compare.sh's scope, and a pipe would run
+# the sink in a subshell that drops the mutation.
 macos_drift_snapshot_fields() { _macos_drift_fields | sarge_emit_drift_snapshot_json; }
 macos_drift_check_fields()    { sarge_emit_drift_check_calls < <(_macos_drift_fields); }
