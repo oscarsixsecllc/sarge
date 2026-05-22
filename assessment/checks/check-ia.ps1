@@ -41,13 +41,26 @@ Invoke-SargeCheck -Id 'WIN-IA-2-account-types' -Family 'IA' -ControlId 'IA-2' -C
     $msg = ("local={0}; msa={1}; aad={2}; other={3}" -f
             $r.local_accounts.Count, $r.msa_accounts.Count,
             $r.aad_accounts.Count, $r.other.Count)
-    # MSA on a security-sensitive host is a yellow flag (cloud-attached identity);
-    # don't FAIL but call it out.
+    # Microsoft Account (consumer MSA) on a managed host is a baseline failure:
+    # auditors in a Moderate/High accreditation boundary expect demonstrable
+    # org control over account lifecycle (provisioning, de-provisioning,
+    # attribute management). MSAs are managed by Microsoft, not the org, so
+    # this fails AC-2 / IA-2. If the host is intentionally outside the
+    # accreditation boundary (e.g. a personal dev laptop), treat as
+    # informational. Promoted from WARN per PR #32 review (2026-05-22).
     if ($r.msa_accounts.Count -gt 0) {
+        $msaList = ($r.msa_accounts -join ', ')
+        $rationale = "Microsoft Account `"$msaList`" detected on the device. " +
+                     "NIST 800-53 AC-2 requires demonstrable org control over account lifecycle " +
+                     "(provisioning, de-provisioning, attribute management). " +
+                     "MSAs are managed by Microsoft, not the org, so an auditor in a Moderate/High " +
+                     "baseline will write a finding. If this host is intentionally outside the org " +
+                     "accreditation boundary (e.g. personal dev laptop), treat this finding as informational. " +
+                     "Inventory: $msg"
         Add-SargeFinding -Id 'WIN-IA-2-account-types' -Family 'IA' -ControlId 'IA-2' `
-            -Verdict 'WARN' `
-            -Message ("Microsoft accounts present: " + ($r.msa_accounts -join ', ') + " | $msg") `
-            -Recommendation 'Confirm MSA usage is intentional; for high-assurance hosts prefer local + AAD-managed identities only.'
+            -Verdict 'FAIL' `
+            -Message $rationale `
+            -Recommendation 'Settings > Accounts > Sign in with a local account instead, or convert to an AAD-joined identity managed by the organization. If this host is outside the accreditation boundary, document the scope exclusion.'
     } else {
         Add-SargeFinding -Id 'WIN-IA-2-account-types' -Family 'IA' -ControlId 'IA-2' `
             -Verdict 'PASS' `

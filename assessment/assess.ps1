@@ -95,6 +95,19 @@ Write-Output ""
 
 $runId = (Get-Date).ToString('yyyyMMdd-HHmmss')
 
+# Per-run folder: one self-contained directory per assessment run. All
+# new artifacts (findings.json, report.md, report.json, context.json,
+# software-inventory.json) land here. Legacy writes under
+# ~\.sarge\state\windows-context.json and ~\.sarge\reports\ are preserved
+# for backwards compatibility (Phase 1a, issue #12). Bash side stays on
+# its existing layout for this PR; tracked separately.
+$runRoot = Join-Path $env:USERPROFILE (".sarge\runs\" + $runId)
+if (-not (Test-Path -LiteralPath $runRoot)) {
+    New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
+}
+$script:SargeRunRoot = $runRoot
+$script:SargeRunId   = $runId
+
 # Reset the findings list in case this is a re-entry within one session.
 $script:SargeFindings = New-Object System.Collections.Generic.List[object]
 
@@ -140,7 +153,7 @@ try {
     # .ToArray() avoids a "Argument types do not match" binding error seen
     # when passing a Generic.List directly via splatting on PS 5.1.
     $findingsArr = $script:SargeFindings.ToArray()
-    $result = Build-SargeReport -Findings $findingsArr -RunId $runId
+    $result = Build-SargeReport -Findings $findingsArr -RunId $runId -RunRoot $runRoot
 } catch {
     Write-Host "[SARGE] build-report failed: $($_.Exception.Message)"
     Write-Host ("[SARGE] InvocationInfo: " + $_.InvocationInfo.PositionMessage)
@@ -153,6 +166,7 @@ Write-Output "[SARGE] ======================================"
 Write-Output ("[SARGE]  Summary: PASS={0} FAIL={1} WARN={2} SKIP={3} EXT={4} UNT={5}" -f `
     $result.counts['PASS'], $result.counts['FAIL'], $result.counts['WARN'], `
     $result.counts['SKIP-CONTEXT-DEFERRED'], $result.counts['ENFORCED-EXTERNALLY'], $result.counts['UNTESTED'])
+Write-Output "[SARGE]  Run folder:      $runRoot"
 Write-Output "[SARGE]  Markdown report: $($result.markdown)"
 Write-Output "[SARGE]  JSON report:     $($result.json)"
 Write-Output "[SARGE]  Findings JSON:   $($result.findings)"

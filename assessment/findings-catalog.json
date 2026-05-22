@@ -439,11 +439,12 @@
     "fix": "Review the inventory exported to %USERPROFILE%\\.sarge\\state\\windows-software-inventory.json and remove unauthorized entries."
   },
   "WIN-IA-2-account-types": {
-    "family": "IA-2 - Identification and Authentication",
-    "what": "Microsoft (consumer) accounts are present on the host",
-    "expected": "Local + AAD-managed identities only on high-assurance hosts",
-    "why": "MSA-attached identities tie local logon to a cloud account outside organizational control. NIST 800-53 IA-2 requires identity assurance under organizational authority.",
-    "fix": "Settings > Accounts > Sign in with a local account instead; or remove the MSA-attached profile."
+    "family": "IA-2 / AC-2 - Identification and Authentication / Account Management",
+    "what": "Microsoft Account (consumer MSA) is present on the host",
+    "expected": "Local + AAD-managed identities only; no MSA-attached profiles on accredited hosts",
+    "why": "MSAs are managed by Microsoft, not the organization. NIST 800-53 AC-2 requires demonstrable org control over account lifecycle (provisioning, de-provisioning, attribute management). An auditor in a Moderate/High baseline will write a finding. If the host is intentionally outside the accreditation boundary (e.g. personal dev laptop), treat as informational.",
+    "fix": "Settings > Accounts > Sign in with a local account instead, or convert to an AAD-joined identity managed by the org. If outside accreditation boundary, document the scope exclusion.",
+    "severity": "high"
   },
   "WIN-IA-5-password-policy": {
     "family": "IA-5 - Authenticator Management",
@@ -524,10 +525,11 @@
   },
   "WIN-SI-4-sysmon": {
     "family": "SI-4 - System Monitoring",
-    "what": "Sysmon is not installed (informational; Sysmon is recommended but not required)",
-    "expected": "Sysmon installed and running with a known-good config",
-    "why": "Sysmon provides richer process / network event telemetry than the default Windows audit channels. NIST 800-53 SI-4 covers system monitoring generally; Sysmon strengthens the baseline.",
-    "fix": "Install Sysmon with SwiftOnSecurity or olafhartong config from https://github.com/SwiftOnSecurity/sysmon-config"
+    "what": "Sysmon is not installed",
+    "expected": "Sysmon installed and running with a published config policy",
+    "why": "Sysmon improves SI-4 system monitoring posture by recording process creation, network connections, file/registry changes, and other security-relevant telemetry that the default Windows event log does not capture.",
+    "fix": "Install Sysmon from https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon and configure with a published policy. Olaf Hartong's sysmon-modular (https://github.com/olafhartong/sysmon-modular) is a reasonable starting point.",
+    "severity": "medium"
   },
   "WIN-SI-7-wdac-policy": {
     "family": "SI-7 - Software, Firmware, and Information Integrity",

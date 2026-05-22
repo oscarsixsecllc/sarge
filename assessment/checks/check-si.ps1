@@ -91,9 +91,9 @@ Invoke-SargeCheck -Id 'WIN-SI-4-sysmon' -Family 'SI' -ControlId 'SI-4' -Check {
             -Message 'Sysmon installed but not running'
     } else {
         Add-SargeFinding -Id 'WIN-SI-4-sysmon' -Family 'SI' -ControlId 'SI-4' `
-            -Verdict 'SKIP-CONTEXT-DEFERRED' `
-            -Message 'Sysmon not installed (optional but recommended for SI-4 monitoring)' `
-            -Recommendation 'Install Sysmon with SwiftOnSecurity or olafhartong config; not strictly required for SI-4 baseline.'
+            -Verdict 'WARN' `
+            -Message 'Sysmon not installed. Sysmon improves SI-4 system monitoring posture by recording process creation, network connections, file/registry changes, and other security-relevant telemetry that the default Windows event log does not capture.' `
+            -Recommendation 'Install Sysmon from https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon and configure with a published policy. Olaf Hartong''s sysmon-modular (https://github.com/olafhartong/sysmon-modular) is a reasonable starting point.'
     }
 }
 

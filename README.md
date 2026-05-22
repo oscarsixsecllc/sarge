@@ -29,6 +29,21 @@ Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool,
 
 ---
 
+## Threat model & scope
+
+Sarge is an **agent-safety control**, not a generic OS hardening kit.
+
+The primary use case is verifying that a host running OpenClaw (or another AI agent) meets the organization's baseline **before** the agent is allowed to make autonomous changes. The risk Sarge addresses isn't "this laptop has CVE-X open" in the abstract — it's "an agent with shell or API access is about to act on a system whose posture we haven't verified, and a wrong action against a weak baseline cascades into incident territory."
+
+Two halves of the safety net:
+
+1. **Pre-flight (Sarge):** assess the host against an 800-53 baseline. If the host isn't safe for autonomous agent action — weak ACLs, missing audit, no antimalware, MSA-attached identity outside org control — that should be visible *before* the agent is handed the keys.
+2. **Post-action recovery (rollback/restore, tracked in issues #28 / #29 / #30):** when the agent does make the wrong change, the rollback path is the safety net. Sarge's drift detection feeds this — drift is the signal that a recovery may be needed.
+
+Sarge covers the broader 800-53 control surface (not just an "agent-relevant subset") because most agent-safety failures cascade from baseline hygiene issues. Weak workspace ACLs let one compromised tool exfiltrate secrets; missing audit means an agent's wrong action is invisible; no antimalware means a downloaded artifact runs unchecked. We cover the agent-relevant controls **and** the surrounding baseline that makes them meaningful.
+
+---
+
 ## Quickstart
 
 ```bash

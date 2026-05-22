@@ -69,8 +69,13 @@ Invoke-SargeCheck -Id 'WIN-CM-8-software-inventory' -Family 'CM' -ControlId 'CM-
         -Message ("Installed software inventory captured ($($r.count) entries) to findings JSON") `
         -Recommendation 'Review the inventory in the Markdown report; remove anything not authorized.'
     # Stash the inventory in a sibling state file so the report can render it
-    # without bloating findings JSON.
+    # without bloating findings JSON. Write to both the legacy state path
+    # (backwards compat) and the per-run folder (self-contained).
     $stateDir = Join-Path $env:USERPROFILE '.sarge\state'
     $invPath = Join-Path $stateDir 'windows-software-inventory.json'
     $r.items | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $invPath -Encoding UTF8
+    if (Get-Variable -Name SargeRunRoot -Scope Script -ErrorAction SilentlyContinue) {
+        $runInvPath = Join-Path $script:SargeRunRoot 'software-inventory.json'
+        $r.items | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $runInvPath -Encoding UTF8
+    }
 }

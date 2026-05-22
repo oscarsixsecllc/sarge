@@ -25,12 +25,17 @@ function Build-SargeReport {
         $Findings,
         $RunId,
         $ReportDir,
-        $StateDir
+        $StateDir,
+        $RunRoot
     )
 
     if (-not $ReportDir) { $ReportDir = (Join-Path $env:USERPROFILE '.sarge\reports') }
     if (-not $StateDir)  { $StateDir  = (Join-Path $env:USERPROFILE '.sarge\state') }
     if (-not $RunId)     { $RunId = (Get-Date).ToString('yyyyMMdd-HHmmss') }
+    if (-not $RunRoot)   { $RunRoot = (Join-Path $env:USERPROFILE (".sarge\runs\" + $RunId)) }
+    if (-not (Test-Path -LiteralPath $RunRoot)) {
+        New-Item -ItemType Directory -Path $RunRoot -Force | Out-Null
+    }
 
     # Normalize to plain array
     $FindingsArr = @($Findings)
@@ -62,8 +67,18 @@ function Build-SargeReport {
     }
 
     # --- Write state findings JSON (machine-readable, no decoration) -----
+    # Legacy path (kept for backwards compatibility with PR #14 contract).
     $findingsPath = Join-Path $StateDir ("findings-" + $RunId + ".json")
     $FindingsArr | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $findingsPath -Encoding UTF8
+
+    # Per-run folder: self-contained copy.
+    $runFindingsPath = Join-Path $RunRoot 'findings.json'
+    $FindingsArr | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $runFindingsPath -Encoding UTF8
+
+    # Copy context.json into the run folder if present.
+    if (Test-Path -LiteralPath $ctxPath) {
+        Copy-Item -LiteralPath $ctxPath -Destination (Join-Path $RunRoot 'context.json') -Force
+    }
 
     # --- Write report JSON ------------------------------------------------
     $jsonReport = [ordered]@{
@@ -83,6 +98,9 @@ function Build-SargeReport {
     }
     $reportJsonPath = Join-Path $ReportDir ("sarge-windows-" + $RunId + ".json")
     $jsonReport | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $reportJsonPath -Encoding UTF8
+    # Per-run folder copy.
+    $jsonReport | ConvertTo-Json -Depth 6 |
+        Set-Content -LiteralPath (Join-Path $RunRoot 'report.json') -Encoding UTF8
 
     # --- Write Markdown ---------------------------------------------------
     $sb = [System.Text.StringBuilder]::new()
@@ -91,7 +109,10 @@ function Build-SargeReport {
     [void]$sb.AppendLine("Run: ``$RunId``  ")
     [void]$sb.AppendLine("Host: ``$env:COMPUTERNAME``  ")
     [void]$sb.AppendLine("Generated: $((Get-Date).ToUniversalTime().ToString('u'))  ")
-    [void]$sb.AppendLine("Domain-joined: ``$isDomainJoined``")
+    [void]$sb.AppendLine("Domain-joined: ``$isDomainJoined``  ")
+    [void]$sb.AppendLine("Run folder: ``$RunRoot``")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("All artifacts for this run (findings.json, report.json, report.md, context.json, software-inventory.json) are co-located in the run folder above.")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("## Summary")
     [void]$sb.AppendLine("")
@@ -132,6 +153,8 @@ function Build-SargeReport {
 
     $reportMdPath = Join-Path $ReportDir ("sarge-windows-" + $RunId + ".md")
     Set-Content -LiteralPath $reportMdPath -Value $sb.ToString() -Encoding UTF8
+    # Per-run folder copy.
+    Set-Content -LiteralPath (Join-Path $RunRoot 'report.md') -Value $sb.ToString() -Encoding UTF8
 
     return [pscustomobject]@{
         markdown = $reportMdPath
