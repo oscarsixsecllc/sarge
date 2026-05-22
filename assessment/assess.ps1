@@ -1,16 +1,14 @@
-# assessment/assess.ps1 — Sarge Windows entry point (detection-only)
+# assessment/assess.ps1 - Sarge Windows entry point.
 #
-# Mirrors the contract of assessment/assess.sh but for Windows. In this PR
-# (parent issue #12, child issue #13) we only run the read-only enterprise
-# context detection layer. Per-control checks land in subsequent PRs, one
-# 800-53 control per PR — that's @keonik's pattern from #3 and we are
-# carrying it across to the Windows surface.
+# Phase 1a (issue #12): runs detection + breadth-first checks across all six
+# 800-53 control families and emits a Markdown + JSON report. No hardening
+# in this phase; recommendations only.
 #
 # Read-only. Standard user. No network. No state changes outside
-# %USERPROFILE%\.sarge\state\.
+# %USERPROFILE%\.sarge\state\ and %USERPROFILE%\.sarge\reports\.
 #
 # Usage:
-#   pwsh assessment/assess.ps1 [--help] [--version]
+#   pwsh assessment/assess.ps1 [--help] [--version] [--checks-only] [--report-only]
 
 [CmdletBinding()]
 param(
@@ -23,89 +21,141 @@ $ErrorActionPreference = 'Stop'
 
 $ShowHelp    = $false
 $ShowVersion = $false
+$ChecksOnly  = $false
+$ReportOnly  = $false
 foreach ($arg in @($RemainingArgs)) {
     switch ($arg) {
-        '--help'     { $ShowHelp = $true }
-        '-h'         { $ShowHelp = $true }
-        '--version'  { $ShowVersion = $true }
-        '-v'         { $ShowVersion = $true }
-        default {
-            Write-Warning "Unknown argument ignored: $arg"
-        }
+        '--help'         { $ShowHelp = $true }
+        '-h'             { $ShowHelp = $true }
+        '--version'      { $ShowVersion = $true }
+        '-v'             { $ShowVersion = $true }
+        '--checks-only'  { $ChecksOnly = $true }
+        '--report-only'  { $ReportOnly = $true }
+        default          { Write-Warning "Unknown argument ignored: $arg" }
     }
 }
 
 if ($ShowHelp) {
     @"
-Sarge — NIST 800-53 Hardening Standard for OpenClaw (Windows entry point)
+Sarge - NIST 800-53 Hardening Standard for OpenClaw (Windows entry point)
 
 USAGE
-    pwsh assessment/assess.ps1 [--help] [--version]
-
-CURRENT SCOPE
-    Detection-only. Runs the read-only enterprise context probes and writes
-    the result to %USERPROFILE%\.sarge\state\windows-context.json.
-
-    Per-control checks (800-53 AC / AU / CM / IA / SC / SI families on Windows)
-    land in subsequent PRs under parent issue
-    https://github.com/oscarsixsecllc/sarge/issues/12.
+    pwsh assessment/assess.ps1 [options]
 
 OPTIONS
     --help, -h        Show this help and exit.
     --version, -v     Show version and exit.
+    --checks-only     Skip the detection probe; assume windows-context.json
+                      already exists. Useful when iterating on checks.
+    --report-only     Skip detection and checks; rebuild the report from the
+                      most recent findings JSON in state/.
 
-ALSO SEE
-    assessment/probes/detect-context.ps1   # the underlying detection probe
-    lib/platform.ps1                        # Get-SargeWindowsContext function
+SCOPE
+    Detection + breadth-first checks across all six 800-53 families on
+    Windows. Recommendations only; no hardening. See parent issue #12.
 "@ | Write-Output
     exit 0
 }
 
 if ($ShowVersion) {
-    # Version surface mirrors the bash side (which has none today) — kept
-    # simple and aligned with the README badge until we wire a real version
-    # source. Bumping here will be a separate housekeeping PR.
-    Write-Output "Sarge assess.ps1 (Windows entry point) — detection-only mode"
+    Write-Output "Sarge assess.ps1 (Windows) - Phase 1a: detection + breadth-first checks"
     exit 0
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$probe     = Join-Path $scriptDir 'probes\detect-context.ps1'
+$repoRoot  = Split-Path -Parent $scriptDir
 
-if (-not (Test-Path -LiteralPath $probe)) {
-    Write-Error "Detection probe not found at $probe"
-    exit 1
+$libDir         = Join-Path $repoRoot 'lib'
+$probesDir      = Join-Path $libDir 'probes'
+$checksDir      = Join-Path $scriptDir 'checks'
+$reportDir      = Join-Path $scriptDir 'report'
+$detectProbe    = Join-Path $scriptDir 'probes\detect-context.ps1'
+
+# Dot-source platform + findings helpers + all 6 family probes.
+. (Join-Path $libDir 'platform.ps1')
+. (Join-Path $libDir 'findings.ps1')
+. (Join-Path $reportDir 'build-report.ps1')
+
+foreach ($p in 'windows-ac','windows-au','windows-cm','windows-ia','windows-sc','windows-si') {
+    $path = Join-Path $probesDir ($p + '.ps1')
+    if (-not (Test-Path -LiteralPath $path)) {
+        Write-Error "Missing probe file: $path"
+        exit 1
+    }
+    . $path
 }
 
 Write-Output "[SARGE] ======================================"
-Write-Output "[SARGE]  Sarge — Windows enterprise context probe"
+Write-Output "[SARGE]  Sarge - Windows assessment (Phase 1a)"
 Write-Output "[SARGE]  Oscar Six Security LLC"
 Write-Output "[SARGE]  $(Get-Date)"
 Write-Output "[SARGE]  Host: $env:COMPUTERNAME"
 Write-Output "[SARGE] ======================================"
 Write-Output ""
 
-# Run the probe (no --print here; assess.ps1 is the orchestrator, not a
-# JSON dump). The probe handles its own error reporting via probe_errors.
-& $probe
-$probeExit = $LASTEXITCODE
+$runId = (Get-Date).ToString('yyyyMMdd-HHmmss')
 
-if ($probeExit -ne 0) {
-    Write-Output ""
-    Write-Output "[SARGE] Detection probe exited with code $probeExit."
-    Write-Output "[SARGE] Inspect %USERPROFILE%\.sarge\state\windows-context.json (if written)"
-    Write-Output "[SARGE] and report at https://github.com/oscarsixsecllc/sarge/issues"
-    exit $probeExit
+# Reset the findings list in case this is a re-entry within one session.
+$script:SargeFindings = New-Object System.Collections.Generic.List[object]
+
+# --- Detection -----------------------------------------------------------
+if (-not $ChecksOnly -and -not $ReportOnly) {
+    if (-not (Test-Path -LiteralPath $detectProbe)) {
+        Write-Error "Detection probe not found at $detectProbe"
+        exit 1
+    }
+    & $detectProbe
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output "[SARGE] Detection probe exited $LASTEXITCODE; continuing with available context."
+    }
+}
+
+# --- Checks --------------------------------------------------------------
+if (-not $ReportOnly) {
+    foreach ($fam in 'ac','au','cm','ia','sc','si') {
+        $checkScript = Join-Path $checksDir ("check-" + $fam + ".ps1")
+        if (-not (Test-Path -LiteralPath $checkScript)) {
+            Write-Warning "Check script missing: $checkScript"
+            continue
+        }
+        . $checkScript
+    }
+}
+
+# --- Report --------------------------------------------------------------
+if ($ReportOnly -and $script:SargeFindings.Count -eq 0) {
+    # Load latest findings JSON from state/
+    $stateDir = Join-Path $env:USERPROFILE '.sarge\state'
+    $latest = Get-ChildItem -LiteralPath $stateDir -Filter 'findings-*.json' -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($null -eq $latest) {
+        Write-Error "No findings JSON found in $stateDir. Run without --report-only first."
+        exit 1
+    }
+    $loaded = Get-Content -LiteralPath $latest.FullName -Raw | ConvertFrom-Json
+    foreach ($f in @($loaded)) { $script:SargeFindings.Add($f) | Out-Null }
+}
+
+try {
+    # .ToArray() avoids a "Argument types do not match" binding error seen
+    # when passing a Generic.List directly via splatting on PS 5.1.
+    $findingsArr = $script:SargeFindings.ToArray()
+    $result = Build-SargeReport -Findings $findingsArr -RunId $runId
+} catch {
+    Write-Host "[SARGE] build-report failed: $($_.Exception.Message)"
+    Write-Host ("[SARGE] InvocationInfo: " + $_.InvocationInfo.PositionMessage)
+    Write-Host $_.ScriptStackTrace
+    exit 1
 }
 
 Write-Output ""
-Write-Output "[SARGE] Detection-only mode. Wrote %USERPROFILE%\.sarge\state\windows-context.json."
-Write-Output "[SARGE] Per-control checks (AC / AU / CM / IA / SC / SI on Windows) land in"
-Write-Output "[SARGE] subsequent PRs under parent issue:"
-Write-Output "[SARGE]   https://github.com/oscarsixsecllc/sarge/issues/12"
-Write-Output "[SARGE]"
-Write-Output "[SARGE] Sarge is OpenClaw-scoped — it surfaces enterprise context (GPO, AppLocker,"
-Write-Output "[SARGE] WDAC, Defender, Intune) so downstream checks can defer to your existing"
-Write-Output "[SARGE] control authority. It is not a generic Windows hardening tool."
+Write-Output "[SARGE] ======================================"
+Write-Output ("[SARGE]  Summary: PASS={0} FAIL={1} WARN={2} SKIP={3} EXT={4} UNT={5}" -f `
+    $result.counts['PASS'], $result.counts['FAIL'], $result.counts['WARN'], `
+    $result.counts['SKIP-CONTEXT-DEFERRED'], $result.counts['ENFORCED-EXTERNALLY'], $result.counts['UNTESTED'])
+Write-Output "[SARGE]  Markdown report: $($result.markdown)"
+Write-Output "[SARGE]  JSON report:     $($result.json)"
+Write-Output "[SARGE]  Findings JSON:   $($result.findings)"
+Write-Output "[SARGE] ======================================"
 
 exit 0
