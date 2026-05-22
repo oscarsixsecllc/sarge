@@ -241,37 +241,15 @@ _macos_drift_fields() {
   echo "system_integrity_protection=${sip:-unknown}"
 }
 
-# Emit the JSON object body (no surrounding braces) for the macOS
-# snapshot. Each line is `"key": "value",` except the last has no
-# trailing comma.
-macos_drift_snapshot_fields() {
-  local lines=()
-  local pair k v
-  while IFS= read -r pair; do
-    [[ -z "$pair" ]] && continue
-    k="${pair%%=*}"
-    v="${pair#*=}"
-    lines+=("    \"$k\": \"$v\"")
-  done < <(_macos_drift_fields)
-  local n=${#lines[@]} i=0
-  while [[ $i -lt $n ]]; do
-    if [[ $i -lt $((n - 1)) ]]; then
-      printf '%s,\n' "${lines[$i]}"
-    else
-      printf '%s\n' "${lines[$i]}"
-    fi
-    i=$((i + 1))
-  done
-}
-
-# Run the platform-specific drift comparisons. Caller (compare.sh) must
-# have defined `check <field> <current-value>` in scope before invoking.
-macos_drift_check_fields() {
-  local pair k v
-  while IFS= read -r pair; do
-    [[ -z "$pair" ]] && continue
-    k="${pair%%=*}"
-    v="${pair#*=}"
-    check "$k" "$v"
-  done < <(_macos_drift_fields)
-}
+# Snapshot + compare dispatch entry points. The actual loops live in
+# lib/platforms/_dispatch.sh (sarge_emit_drift_snapshot_json /
+# sarge_emit_drift_check_calls) — these wrappers exist only to satisfy
+# the `platform drift_*_fields` dispatch contract.
+#
+# The snapshot wrapper uses a pipe; the check wrapper uses process
+# substitution. They look symmetric but they're not — see the rationale
+# block on sarge_emit_drift_check_calls in _dispatch.sh. tl;dr: `check`
+# mutates a DRIFT counter in compare.sh's scope, and a pipe would run
+# the sink in a subshell that drops the mutation.
+macos_drift_snapshot_fields() { _macos_drift_fields | sarge_emit_drift_snapshot_json; }
+macos_drift_check_fields()    { sarge_emit_drift_check_calls < <(_macos_drift_fields); }
