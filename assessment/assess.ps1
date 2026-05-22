@@ -24,6 +24,7 @@ $ShowVersion = $false
 $ChecksOnly  = $false
 $ReportOnly  = $false
 foreach ($arg in @($RemainingArgs)) {
+    if ([string]::IsNullOrWhiteSpace($arg)) { continue }
     switch ($arg) {
         '--help'         { $ShowHelp = $true }
         '-h'             { $ShowHelp = $true }
