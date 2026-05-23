@@ -45,7 +45,7 @@ function Add-SargeFinding {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Id,
-        [Parameter(Mandatory)] [ValidateSet('AC','AU','CM','IA','SC','SI')] [string] $Family,
+        [Parameter(Mandatory)] [ValidateSet('AC','AU','CM','IA','SC','SI','POL')] [string] $Family,
         [Parameter(Mandatory)] [string] $ControlId,
         [Parameter(Mandatory)]
         [ValidateSet('PASS','FAIL','WARN','SKIP-CONTEXT-DEFERRED','ENFORCED-EXTERNALLY','UNTESTED')]
@@ -100,7 +100,7 @@ function Invoke-SargeCheck {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Id,
-        [Parameter(Mandatory)] [ValidateSet('AC','AU','CM','IA','SC','SI')] [string] $Family,
+        [Parameter(Mandatory)] [ValidateSet('AC','AU','CM','IA','SC','SI','POL')] [string] $Family,
         [Parameter(Mandatory)] [string] $ControlId,
         [Parameter(Mandatory)] [scriptblock] $Check
     )

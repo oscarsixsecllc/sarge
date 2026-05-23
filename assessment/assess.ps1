@@ -19,20 +19,22 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ShowHelp    = $false
-$ShowVersion = $false
-$ChecksOnly  = $false
-$ReportOnly  = $false
+$ShowHelp       = $false
+$ShowVersion    = $false
+$ChecksOnly     = $false
+$ReportOnly     = $false
+$InspectPolicy  = $false
 foreach ($arg in @($RemainingArgs)) {
     if ([string]::IsNullOrWhiteSpace($arg)) { continue }
     switch ($arg) {
-        '--help'         { $ShowHelp = $true }
-        '-h'             { $ShowHelp = $true }
-        '--version'      { $ShowVersion = $true }
-        '-v'             { $ShowVersion = $true }
-        '--checks-only'  { $ChecksOnly = $true }
-        '--report-only'  { $ReportOnly = $true }
-        default          { Write-Warning "Unknown argument ignored: $arg" }
+        '--help'             { $ShowHelp = $true }
+        '-h'                 { $ShowHelp = $true }
+        '--version'          { $ShowVersion = $true }
+        '-v'                 { $ShowVersion = $true }
+        '--checks-only'      { $ChecksOnly = $true }
+        '--report-only'      { $ReportOnly = $true }
+        '--inspect-policy'   { $InspectPolicy = $true }
+        default              { Write-Warning "Unknown argument ignored: $arg" }
     }
 }
 
@@ -50,6 +52,11 @@ OPTIONS
                       already exists. Useful when iterating on checks.
     --report-only     Skip detection and checks; rebuild the report from the
                       most recent findings JSON in state/.
+    --inspect-policy  Phase 1b: probe managed-policy state (Intune MDM CSP
+                      and/or AD GPO), emit WIN-POL findings, and overlay
+                      verdicts onto Phase 1a control findings where managed
+                      policy provides the enforcement. Standard user, no
+                      elevation. See issue #31.
 
 SCOPE
     Detection + breadth-first checks across all six 800-53 families on
@@ -86,8 +93,9 @@ foreach ($p in 'windows-ac','windows-au','windows-cm','windows-ia','windows-sc',
     . $path
 }
 
+$phaseTag = if ($InspectPolicy) { 'Phase 1a + 1b (policy overlay)' } else { 'Phase 1a' }
 Write-Output "[SARGE] ======================================"
-Write-Output "[SARGE]  Sarge - Windows assessment (Phase 1a)"
+Write-Output ("[SARGE]  Sarge - Windows assessment ({0})" -f $phaseTag)
 Write-Output "[SARGE]  Oscar Six Security LLC"
 Write-Output "[SARGE]  $(Get-Date)"
 Write-Output "[SARGE]  Host: $env:COMPUTERNAME"
@@ -124,8 +132,45 @@ if (-not $ChecksOnly -and -not $ReportOnly) {
     }
 }
 
+# --- Policy probes (Phase 1b, opt-in via --inspect-policy) ---------------
+$script:SargePolicyMode      = $null
+$script:SargePolicyInventory = $null
+$script:SargePolicyGpresult  = $null
+$script:SargePolicyAdGpo     = $null
+$script:SargeInspectPolicy   = [bool]$InspectPolicy
+
+if ($InspectPolicy -and -not $ReportOnly) {
+    $policyProbe = Join-Path $probesDir 'windows-policy.ps1'
+    if (-not (Test-Path -LiteralPath $policyProbe)) {
+        Write-Warning "Policy probe file missing: $policyProbe; --inspect-policy ignored"
+    } else {
+        . $policyProbe
+        Write-Output "[SARGE] --inspect-policy: probing managed-policy state..."
+        try { $script:SargePolicyMode = Get-SargeHostPolicyMode } catch { Write-Warning "Get-SargeHostPolicyMode failed: $($_.Exception.Message)" }
+        if ($null -ne $script:SargePolicyMode) {
+            Write-Output ("[SARGE]   policy mode: " + $script:SargePolicyMode.mode + " (" + $script:SargePolicyMode.reason + ")")
+            switch ($script:SargePolicyMode.mode) {
+                'aad-mdm'     { try { $script:SargePolicyInventory = Get-SargeMdmPolicyInventory } catch { Write-Warning "MDM inventory probe failed: $($_.Exception.Message)" } }
+                'aad-no-mdm'  { try { $script:SargePolicyInventory = Get-SargeMdmPolicyInventory } catch { Write-Warning "MDM inventory probe failed: $($_.Exception.Message)" } }
+                'ad-rsat'     {
+                    try { $script:SargePolicyAdGpo    = Get-SargeAdGpoData }    catch { Write-Warning "AD GPO probe failed: $($_.Exception.Message)" }
+                    try { $script:SargePolicyGpresult = Get-SargeGpresultData } catch { Write-Warning "gpresult probe failed: $($_.Exception.Message)" }
+                }
+                'ad-gpresult' { try { $script:SargePolicyGpresult = Get-SargeGpresultData } catch { Write-Warning "gpresult probe failed: $($_.Exception.Message)" } }
+                default       { }
+            }
+        }
+    }
+}
+
 # --- Checks --------------------------------------------------------------
 if (-not $ReportOnly) {
+    # Phase 1b: policy check runs first so Apply-PolicyOverlay can see the
+    # POL findings; the overlay then mutates the Phase 1a findings.
+    if ($InspectPolicy) {
+        $policyCheck = Join-Path $checksDir 'check-policy.ps1'
+        if (Test-Path -LiteralPath $policyCheck) { . $policyCheck }
+    }
     foreach ($fam in 'ac','au','cm','ia','sc','si') {
         $checkScript = Join-Path $checksDir ("check-" + $fam + ".ps1")
         if (-not (Test-Path -LiteralPath $checkScript)) {
@@ -133,6 +178,19 @@ if (-not $ReportOnly) {
             continue
         }
         . $checkScript
+    }
+    # Apply the policy overlay after Phase 1a checks have populated findings.
+    if ($InspectPolicy) {
+        try {
+            $overlayCount = Apply-PolicyOverlay -Findings $script:SargeFindings `
+                -Inventory $script:SargePolicyInventory `
+                -Gpresult  $script:SargePolicyGpresult `
+                -AdGpo     $script:SargePolicyAdGpo
+            Write-Output ("[SARGE] Policy overlay re-verdicted {0} finding(s) -> ENFORCED-EXTERNALLY" -f $overlayCount)
+            $script:SargePolicyOverlayCount = $overlayCount
+        } catch {
+            Write-Warning "Apply-PolicyOverlay failed: $($_.Exception.Message)"
+        }
     }
 }
 
