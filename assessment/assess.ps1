@@ -82,6 +82,7 @@ $detectProbe    = Join-Path $scriptDir 'probes\detect-context.ps1'
 # Dot-source platform + findings helpers + all 6 family probes.
 . (Join-Path $libDir 'platform.ps1')
 . (Join-Path $libDir 'findings.ps1')
+. (Join-Path $libDir 'policy-overlay.ps1')
 . (Join-Path $reportDir 'build-report.ps1')
 
 foreach ($p in 'windows-ac','windows-au','windows-cm','windows-ia','windows-sc','windows-si') {
