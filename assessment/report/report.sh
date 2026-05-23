@@ -11,6 +11,8 @@ OUTPUT=""
 RESULTS=""
 REPORT_DIR=""
 STATE_DIR=""
+RUN_ROOT=""
+RUN_ID=""
 CATALOG=""
 
 while [[ $# -gt 0 ]]; do
@@ -23,6 +25,8 @@ while [[ $# -gt 0 ]]; do
     --results) RESULTS="$2"; shift 2 ;;
     --report-dir) REPORT_DIR="$2"; shift 2 ;;
     --state-dir) STATE_DIR="$2"; shift 2 ;;
+    --run-root) RUN_ROOT="$2"; shift 2 ;;
+    --run-id) RUN_ID="$2"; shift 2 ;;
     --catalog) CATALOG="$2"; shift 2 ;;
     *) shift ;;
   esac
@@ -33,10 +37,12 @@ done
 # Defaults
 REPORT_DIR="${REPORT_DIR:-$HOME/.sarge/reports}"
 STATE_DIR="${STATE_DIR:-$HOME/.sarge/state}"
+RUN_ID="${RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
+RUN_ROOT="${RUN_ROOT:-$HOME/.sarge/runs/$RUN_ID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CATALOG="${CATALOG:-$SCRIPT_DIR/../findings-catalog.json}"
 
-mkdir -p "$REPORT_DIR" "$STATE_DIR"
+mkdir -p "$REPORT_DIR" "$STATE_DIR" "$RUN_ROOT"
 
 TIMESTAMP=$(date -Iseconds)
 TOTAL=$((PASS+WARN+FAIL+SKIP))
@@ -54,11 +60,20 @@ DRIFT_COUNT=0
 [[ -f "$DRIFT_COUNT_FILE" ]] && DRIFT_COUNT=$(cat "$DRIFT_COUNT_FILE" 2>/dev/null || echo 0)
 [[ -z "$DRIFT_COUNT" ]] && DRIFT_COUNT=0
 
-# --- Find previous report (most recent JSON in REPORT_DIR, excluding the
-# one we are about to write). Filenames sort lexically by timestamp. ---
+# --- Find previous report. Prefer the per-run folder layout (issue #34):
+# scan ~/.sarge/runs/*/report.json and pick the lexically-latest one that
+# isn't our current run. Fall back to the legacy REPORT_DIR scan so the
+# delta panel keeps working on hosts that ran older Sarge releases. ---
 CURRENT_JSON_BASENAME="$(basename "$OUTPUT").json"
+RUNS_ROOT="$(dirname "$RUN_ROOT")"
+CURRENT_RUN_BASENAME="$(basename "$RUN_ROOT")"
 PREV_JSON=""
-if [[ -d "$REPORT_DIR" ]]; then
+if [[ -d "$RUNS_ROOT" ]]; then
+  PREV_JSON=$(find "$RUNS_ROOT" -mindepth 2 -maxdepth 2 -type f -name 'report.json' 2>/dev/null \
+              | awk -v cur="$CURRENT_RUN_BASENAME" -F/ '$(NF-1) != cur' \
+              | sort | tail -n1)
+fi
+if [[ -z "$PREV_JSON" && -d "$REPORT_DIR" ]]; then
   PREV_JSON=$(find "$REPORT_DIR" -maxdepth 1 -type f -name 'sarge-report-*.json' \
               ! -name "$CURRENT_JSON_BASENAME" 2>/dev/null \
               | sort | tail -n1)
@@ -287,6 +302,10 @@ INSTALL_DATE_HUMAN="$INSTALLED_AT"
   echo "_Assessment timestamp: ${TIMESTAMP}_"
 } > "${OUTPUT}.md"
 
+# Per-run folder copy (issue #34): mirror the Markdown report into the
+# self-contained run directory alongside report.json and findings.json.
+cp "${OUTPUT}.md" "${RUN_ROOT}/report.md"
+
 # --- Build JSON report ---
 # Use jq when available for safe escaping; otherwise hand-roll.
 if command -v jq &>/dev/null; then
@@ -387,4 +406,41 @@ else
     echo "  ]"
     echo "}"
   } > "${OUTPUT}.json"
+fi
+
+# Per-run folder copies (issue #34): keep the legacy REPORT_DIR writes
+# above for backwards compatibility, and also publish the JSON report and
+# a standalone findings.json under $RUN_ROOT so the run directory is
+# self-contained.
+cp "${OUTPUT}.json" "${RUN_ROOT}/report.json"
+
+# findings.json: just the results array, mirroring the Windows
+# build-report.ps1 output shape (a flat array of finding objects).
+if command -v jq &>/dev/null; then
+  printf '%s\n' "${ALL_LINES[@]}" | jq -R -s '
+    split("\n")
+    | map(select(length > 0))
+    | map(split("|"))
+    | map({
+        status: .[0],
+        check_id: (.[1] // ""),
+        detail: (.[2:] | join("|"))
+      })
+  ' > "${RUN_ROOT}/findings.json"
+else
+  # Hand-rolled fallback — same best-effort escaping as the JSON report.
+  {
+    echo "["
+    n=${#ALL_LINES[@]}; i=0
+    for line in "${ALL_LINES[@]}"; do
+      i=$((i+1))
+      status=$(echo "$line" | awk -F'|' '{print $1}')
+      check_id=$(echo "$line" | awk -F'|' '{print $2}')
+      detail=$(echo "$line" | awk -F'|' '{ for (k=3;k<=NF;k++) { printf "%s%s", (k==3?"":"|"), $k } }')
+      detail_escaped=$(printf '%s' "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g')
+      sep=","; [[ "$i" -eq "$n" ]] && sep=""
+      echo "  {\"status\": \"${status}\", \"check_id\": \"${check_id}\", \"detail\": \"${detail_escaped}\"}${sep}"
+    done
+    echo "]"
+  } > "${RUN_ROOT}/findings.json"
 fi
