@@ -107,3 +107,79 @@ function Get-SargeSiWdacPolicyPresence {
         count    = $found.Count
     }
 }
+
+# SI-5: security alerts pipeline - WSUS reporting target + Defender sample
+# submission consent. Standard user can read both surfaces.
+function Get-SargeSiUpdateReporting {
+    [CmdletBinding()] param()
+    $wsusReporting = $null
+    $wuKey = 'HKLM:\Software\Policies\Microsoft\Windows\WindowsUpdate'
+    try {
+        if (Test-Path -LiteralPath $wuKey) {
+            $p = Get-ItemProperty -LiteralPath $wuKey -ErrorAction Stop
+            if ($p.PSObject.Properties['WUStatusServer']) {
+                $wsusReporting = [string]$p.WUStatusServer
+            }
+        }
+    } catch { }
+    $submitSamples = $null
+    if (Get-Command Get-MpPreference -ErrorAction SilentlyContinue) {
+        try {
+            $pref = Get-MpPreference -ErrorAction Stop
+            if ($pref.PSObject.Properties['SubmitSamplesConsent']) {
+                $submitSamples = [int]$pref.SubmitSamplesConsent
+            }
+        } catch { }
+    }
+    return [pscustomobject]@{
+        wsus_status_server      = $wsusReporting
+        submit_samples_consent  = $submitSamples
+    }
+}
+
+# SI-8: spam protection - only meaningful if a mail role is present on the host.
+# We probe for Exchange / IIS SMTP / hMailServer services.
+function Get-SargeSiMailRole {
+    [CmdletBinding()] param()
+    $watch = @('MSExchangeIS','MSExchangeTransport','SMTPSVC','hMailServer','MailEnable-IMAP','MailEnable-POP','MailEnable-SMTP')
+    $present = @()
+    foreach ($s in $watch) {
+        $svc = Get-CimInstance -ClassName Win32_Service -Filter "Name='$s'" -ErrorAction SilentlyContinue
+        if ($null -ne $svc) { $present += $s }
+    }
+    return [pscustomobject]@{
+        mail_role_services_present = $present
+        mail_role_detected         = ($present.Count -gt 0)
+    }
+}
+
+# SI-16: memory protection - system-wide ProcessMitigation policy. Standard user
+# can call Get-ProcessMitigation on PS 5.1+ / Win10+.
+function Get-SargeSiMemoryProtection {
+    [CmdletBinding()] param()
+    if (-not (Get-Command Get-ProcessMitigation -ErrorAction SilentlyContinue)) {
+        throw 'Get-ProcessMitigation not available (pre-Win10 or stripped SKU)'
+    }
+    $m = Get-ProcessMitigation -System -ErrorAction Stop
+    $dep   = $null
+    $aslr  = $null
+    $cfg   = $null
+    $signing = $null
+    try {
+        if ($m.PSObject.Properties['DEP']  -and $m.DEP)  { $dep  = [string]$m.DEP.Enable }
+        if ($m.PSObject.Properties['ASLR'] -and $m.ASLR) { $aslr = [string]$m.ASLR.ForceRelocateImages }
+        if ($m.PSObject.Properties['CFG']  -and $m.CFG)  { $cfg  = [string]$m.CFG.Enable }
+        if ($m.PSObject.Properties['ImageLoad'] -and $m.ImageLoad) {
+            if ($m.ImageLoad.PSObject.Properties['BlockRemoteImageLoads']) {
+                $signing = [string]$m.ImageLoad.BlockRemoteImageLoads
+            }
+        }
+    } catch { }
+    return [pscustomobject]@{
+        dep             = $dep
+        aslr_force_relocate = $aslr
+        cfg             = $cfg
+        image_load_block_remote = $signing
+        raw_object_kind = $m.GetType().FullName
+    }
+}

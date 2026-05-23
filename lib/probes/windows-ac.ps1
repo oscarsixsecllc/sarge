@@ -159,3 +159,68 @@ function Get-SargeAcIdleLockPolicy {
         machine_policy_timeout = $machineTimeout
     }
 }
+
+# AC-8: legal logon banner. Standard user can read the System policy hive.
+function Get-SargeAcLegalBanner {
+    [CmdletBinding()] param()
+    $key = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System'
+    $caption = $null
+    $text    = $null
+    try {
+        $p = Get-ItemProperty -LiteralPath $key -ErrorAction Stop
+        if ($p.PSObject.Properties['LegalNoticeCaption']) { $caption = [string]$p.LegalNoticeCaption }
+        if ($p.PSObject.Properties['LegalNoticeText'])    { $text    = [string]$p.LegalNoticeText }
+    } catch { }
+    return [pscustomobject]@{
+        caption        = $caption
+        caption_length = if ($null -eq $caption) { 0 } else { $caption.Length }
+        text_length    = if ($null -eq $text)    { 0 } else { $text.Length }
+    }
+}
+
+# AC-12: SMB network logon session termination. LanmanServer autodisconnect in
+# MINUTES; -1 = never. Standard user can read.
+function Get-SargeAcSessionTermination {
+    [CmdletBinding()] param()
+    $key = 'HKLM:\System\CurrentControlSet\Services\LanmanServer\Parameters'
+    $autodisconnect = $null
+    try {
+        $p = Get-ItemProperty -LiteralPath $key -ErrorAction Stop
+        if ($p.PSObject.Properties['autodisconnect']) {
+            $autodisconnect = [int]$p.autodisconnect
+        }
+    } catch { }
+    return [pscustomobject]@{
+        autodisconnect_minutes = $autodisconnect
+    }
+}
+
+# AC-17: RDP remote access posture - NLA required, encryption level, security
+# layer. Standard user can read the Terminal Server registry hive.
+function Get-SargeAcRdpPosture {
+    [CmdletBinding()] param()
+    $rdpTcp = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+    $tsRoot = 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+    $userAuth      = $null
+    $minEncryption = $null
+    $securityLayer = $null
+    $denyTSConnect = $null
+    try {
+        $p = Get-ItemProperty -LiteralPath $rdpTcp -ErrorAction Stop
+        if ($p.PSObject.Properties['UserAuthentication']) { $userAuth      = [int]$p.UserAuthentication }
+        if ($p.PSObject.Properties['MinEncryptionLevel']) { $minEncryption = [int]$p.MinEncryptionLevel }
+        if ($p.PSObject.Properties['SecurityLayer'])      { $securityLayer = [int]$p.SecurityLayer }
+    } catch { }
+    try {
+        $p2 = Get-ItemProperty -LiteralPath $tsRoot -ErrorAction Stop
+        if ($p2.PSObject.Properties['fDenyTSConnections']) { $denyTSConnect = [int]$p2.fDenyTSConnections }
+    } catch { }
+    return [pscustomobject]@{
+        nla_required         = ($userAuth -eq 1)
+        user_authentication  = $userAuth
+        min_encryption_level = $minEncryption
+        security_layer       = $securityLayer
+        rdp_disabled         = ($denyTSConnect -eq 1)
+        deny_ts_connections  = $denyTSConnect
+    }
+}

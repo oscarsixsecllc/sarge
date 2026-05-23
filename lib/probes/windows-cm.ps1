@@ -91,3 +91,75 @@ function Get-SargeCmInstalledSoftware {
         items = $unique
     }
 }
+
+# CM-2: baseline configuration snapshot for drift detection.
+function Get-SargeCmBaselineSnapshot {
+    [CmdletBinding()] param()
+    $services = @()
+    try {
+        $services = Get-CimInstance -ClassName Win32_Service -ErrorAction Stop |
+                    Where-Object { $_.State -eq 'Running' } |
+                    ForEach-Object { $_.Name } | Sort-Object -Unique
+    } catch { }
+    $tasks = @()
+    if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
+        try {
+            $tasks = @(Get-ScheduledTask -ErrorAction Stop |
+                       Where-Object { $_.State -ne 'Disabled' } |
+                       ForEach-Object { ($_.TaskPath + $_.TaskName) }) | Sort-Object -Unique
+        } catch { }
+    }
+    $regKeys = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System',
+        'HKLM:\System\CurrentControlSet\Control\Lsa',
+        'HKLM:\System\CurrentControlSet\Services\LanmanServer\Parameters',
+        'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+    )
+    $regDigest = @{}
+    foreach ($k in $regKeys) {
+        try {
+            if (Test-Path -LiteralPath $k) {
+                $p = Get-ItemProperty -LiteralPath $k -ErrorAction Stop
+                $pairs = @()
+                foreach ($prop in $p.PSObject.Properties) {
+                    if ($prop.Name -like 'PS*') { continue }
+                    $pairs += ("{0}={1}" -f $prop.Name, $prop.Value)
+                }
+                $regDigest[$k] = ($pairs | Sort-Object) -join '|'
+            }
+        } catch { }
+    }
+    return [pscustomobject]@{
+        services_running = @($services)
+        scheduled_tasks  = @($tasks)
+        registry_digest  = $regDigest
+        captured_at      = (Get-Date).ToString('o')
+    }
+}
+
+# CM-11: user-installed software policy - AppX packages + HKCU uninstall hive.
+function Get-SargeCmUserInstalledSoftware {
+    [CmdletBinding()] param()
+    $appx = @()
+    if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
+        try {
+            $appx = @(Get-AppxPackage -ErrorAction Stop |
+                      Where-Object { -not $_.IsFramework -and $_.SignatureKind -ne 'System' } |
+                      ForEach-Object { $_.Name })
+        } catch { }
+    }
+    $hkcuUninstall = @()
+    try {
+        $rows = Get-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction Stop |
+                Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName }
+        foreach ($r in $rows) {
+            $hkcuUninstall += [string]$r.DisplayName
+        }
+    } catch { }
+    return [pscustomobject]@{
+        appx_user_packages   = $appx
+        appx_count           = $appx.Count
+        hkcu_installed       = $hkcuUninstall
+        hkcu_installed_count = $hkcuUninstall.Count
+    }
+}

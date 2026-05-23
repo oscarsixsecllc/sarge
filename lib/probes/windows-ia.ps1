@@ -93,3 +93,44 @@ function Get-SargeIaSeceditExport {
         Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
     }
 }
+
+# IA-3: device identification + authentication. TPM presence/readiness and
+# Secure Boot status. Standard user can call Get-Tpm and Confirm-SecureBootUEFI
+# on Win10/11 client SKUs.
+function Get-SargeIaDeviceIdentity {
+    [CmdletBinding()] param()
+    $tpmPresent = $null
+    $tpmReady   = $null
+    $secureBoot = $null
+    if (Get-Command Get-Tpm -ErrorAction SilentlyContinue) {
+        try {
+            $tpm = Get-Tpm -ErrorAction Stop
+            if ($tpm.PSObject.Properties['TpmPresent']) { $tpmPresent = [bool]$tpm.TpmPresent }
+            if ($tpm.PSObject.Properties['TpmReady'])   { $tpmReady   = [bool]$tpm.TpmReady }
+        } catch { }
+    }
+    if (Get-Command Confirm-SecureBootUEFI -ErrorAction SilentlyContinue) {
+        try {
+            $secureBoot = [bool](Confirm-SecureBootUEFI -ErrorAction Stop)
+        } catch { }
+    }
+    return [pscustomobject]@{
+        tpm_present = $tpmPresent
+        tpm_ready   = $tpmReady
+        secure_boot = $secureBoot
+    }
+}
+
+# IA-12: identity proofing via Windows Hello / NGC. Standard user can read
+# the PassportForWork policy hive + NGC directory presence.
+function Get-SargeIaWindowsHello {
+    [CmdletBinding()] param()
+    $policyKey = 'HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork'
+    $policyPresent = (Test-Path -LiteralPath $policyKey)
+    $ngcDir = "$env:windir\ServiceProfiles\LocalService\AppData\Local\Microsoft\Ngc"
+    $ngcPresent = (Test-Path -LiteralPath $ngcDir)
+    return [pscustomobject]@{
+        policy_present  = $policyPresent
+        ngc_dir_present = $ngcPresent
+    }
+}
