@@ -150,6 +150,76 @@ Sarge scripts use exit codes to signal *what they did*, not just *whether they s
 
 ---
 
+## Pre-hardening backup + rollback (Ubuntu)
+
+Before any `harden-*.sh` runs on Ubuntu, Sarge captures a layered backup
+so every change is reversible. Closes
+[#29](https://github.com/oscarsixsecllc/sarge/issues/29).
+
+### Snapshot tooling — preference order
+
+`scripts/backup-ubuntu.sh` probes for snapshot tooling and uses the first
+match. The file-level snapshot **always** runs regardless of which
+block-level tool was selected (it's the safety net).
+
+1. **Btrfs / ZFS root subvolume snapshot** — if `stat -f -c '%T' /`
+   returns `btrfs` or `zfs`. Snapshot tagged
+   `sarge-pre-hardening-<run-id>`.
+2. **timeshift** — if installed.
+   `timeshift --create --comments "Sarge pre-hardening <run-id>" --tags O`.
+3. **LVM thin snapshot** — if root LV is on a thin pool. Classic LVM
+   is skipped (thick provisioning makes snapshots brittle).
+4. **File-level snapshot (fallback, always collected)** —
+   `cp -p` of every `/etc/` path Phase 2 hardening can touch, plus
+   `ufw status verbose`, `ufw show added`, `auditctl -l`, `auditctl -s`,
+   `systemctl list-unit-files --state=enabled,disabled,masked`,
+   `dpkg --get-selections`, full `/etc/pam.d/`.
+
+Artifacts land under `~/.sarge/runs/<run-id>/backup/`:
+
+```
+~/.sarge/runs/<run-id>/backup/
+├── fs/etc/...           # mirrored /etc tree (login.defs, ssh/, pam.d/, audit/rules.d/, sysctl.d/, security/limits.conf)
+├── ufw-state.txt
+├── audit-state.txt
+├── services.txt
+├── packages.txt
+├── backup.log
+├── rollback.sh          # auto-generated, executable
+└── summary.md
+```
+
+### Usage
+
+```bash
+# Interactive opt-in (Y/Enter proceeds, N explicit-skip)
+bash scripts/backup-ubuntu.sh --run-id "$SARGE_RUN_ID"
+
+# Unattended (CI / chained from assess.sh)
+bash scripts/backup-ubuntu.sh --unattended --run-id "$SARGE_RUN_ID"
+
+# Roll back the most recent run (prompts for confirmation)
+bash scripts/rollback-ubuntu.sh
+
+# Roll back a specific run
+bash scripts/rollback-ubuntu.sh --run-id 20260523-120000
+
+# Unattended rollback
+bash scripts/rollback-ubuntu.sh --backup-dir ~/.sarge/runs/<id>/backup --unattended
+```
+
+`--test-mode` logs the chosen snapshot tool but skips the destructive
+block-level snapshot — used by the smoke test
+(`tests/integration/backup-ubuntu-smoke.sh`).
+
+### Sandbox / non-root testing
+
+`rollback.sh` honors `SARGE_ROLLBACK_ROOT=<prefix>` for sandbox round-trip
+tests — when set, file restores are written under the prefix and the
+systemctl / ufw / auditctl / dpkg branches are skipped.
+
+---
+
 ## Pre-hardening backup + rollback (macOS)
 
 > **Untested on real macOS hardware.** Oscar Six does not currently have
