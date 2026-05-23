@@ -143,7 +143,17 @@ if (Test-Path -LiteralPath $taskDir) {
     $entries = @()
     if (Test-Path -LiteralPath $manifestFile) {
         try {
-            $entries = @(Get-Content -Raw -LiteralPath $manifestFile | ConvertFrom-Json)
+            # ConvertFrom-Json returns Object[] for a top-level JSON array.
+            # Wrapping that with @(...) does NOT flatten under PS 5.1 —
+            # @(@(...)) yields a single-element wrapper, so $entries.Count
+            # would be 1 and the foreach would iterate once with $entry
+            # bound to the whole inner array (and $entry.taskName $null).
+            # Build the list explicitly so both array-of-N and single-object
+            # payloads land as N PSObject entries.
+            $parsed = Get-Content -Raw -LiteralPath $manifestFile | ConvertFrom-Json
+            if ($null -ne $parsed) {
+                foreach ($e in $parsed) { $entries += ,$e }
+            }
         } catch {
             Write-Warning "tasks/manifest.json unreadable ($($_.Exception.Message)); falling back to filename scan"
         }
