@@ -1,0 +1,61 @@
+name: Pester (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/probes/windows-*.ps1'
+      - 'lib/platform.ps1'
+      - 'lib/findings.ps1'
+      - 'assessment/checks/check-*.ps1'
+      - 'assessment/report/build-report.ps1'
+      - 'assessment/assess.ps1'
+      - 'tests/Pester/**'
+      - '.github/workflows/pester-windows.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/probes/windows-*.ps1'
+      - 'lib/platform.ps1'
+      - 'lib/findings.ps1'
+      - 'assessment/checks/check-*.ps1'
+      - 'assessment/report/build-report.ps1'
+      - 'assessment/assess.ps1'
+      - 'tests/Pester/**'
+      - '.github/workflows/pester-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  pester:
+    name: Run Pester suite
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pester 5+
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Import-Module Pester -MinimumVersion 5.5.0
+          Get-Module Pester | Format-Table Name, Version
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests/Pester'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.TestResult.OutputPath = 'testResults.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-test-results
+          path: testResults.xml
+          if-no-files-found: warn
