@@ -26,6 +26,7 @@ $ErrorActionPreference = 'Stop'
 
 $Print = $false
 foreach ($arg in @($RemainingArgs)) {
+    if ([string]::IsNullOrWhiteSpace($arg)) { continue }
     switch ($arg) {
         '--print' { $Print = $true }
         '-Print'  { $Print = $true }

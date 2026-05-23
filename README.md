@@ -29,6 +29,21 @@ Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool,
 
 ---
 
+## Threat model & scope
+
+Sarge is an **agent-safety control**, not a generic OS hardening kit.
+
+The primary use case is verifying that a host running OpenClaw (or another AI agent) meets the organization's baseline **before** the agent is allowed to make autonomous changes. The risk Sarge addresses isn't "this laptop has CVE-X open" in the abstract — it's "an agent with shell or API access is about to act on a system whose posture we haven't verified, and a wrong action against a weak baseline cascades into incident territory."
+
+Two halves of the safety net:
+
+1. **Pre-flight (Sarge):** assess the host against an 800-53 baseline. If the host isn't safe for autonomous agent action — weak ACLs, missing audit, no antimalware, MSA-attached identity outside org control — that should be visible *before* the agent is handed the keys.
+2. **Post-action recovery (rollback/restore, tracked in issues #28 / #29 / #30):** when the agent does make the wrong change, the rollback path is the safety net. Sarge's drift detection feeds this — drift is the signal that a recovery may be needed.
+
+Sarge covers the broader 800-53 control surface (not just an "agent-relevant subset") because most agent-safety failures cascade from baseline hygiene issues. Weak workspace ACLs let one compromised tool exfiltrate secrets; missing audit means an agent's wrong action is invisible; no antimalware means a downloaded artifact runs unchecked. We cover the agent-relevant controls **and** the surrounding baseline that makes them meaningful.
+
+---
+
 ## Quickstart
 
 ```bash
@@ -61,9 +76,9 @@ Full docs: [docs/quickstart.md](docs/quickstart.md)
 | System & Information Integrity | SI | 5 | Partial |
 | **Total** | | **47** | |
 
-**Baseline:** NIST SP 800-53 Rev 5 | **Platforms:** Ubuntu 22.04 / 24.04 LTS (full); macOS (gap analysis + drift; permissions hardening only); Windows (detection-only, controls land per [#12](https://github.com/oscarsixsecllc/sarge/issues/12))
+**Baseline:** NIST SP 800-53 Rev 5 | **Platforms:** Ubuntu 22.04 / 24.04 LTS (full); macOS (gap analysis + drift; permissions hardening only); Windows (detection + breadth-first recommendations across all 6 control families; hardening blocked on pre-hardening backup work)
 
-> **Platform support status:** Full coverage on Ubuntu 22.04 / 24.04 LTS today. On macOS, gap analysis (`assessment/assess.sh`) and drift detection (`drift/snapshot.sh`, `drift/compare.sh`) now run natively — controls with a clean macOS analog (filesystem, accounts, firewall, listening ports, SSH, integrity checksums, session timeout) are evaluated; controls rooted in Linux-only facilities (auditd / pam_faillock / pwquality / login.defs / apt / unattended-upgrades / clamav / fail2ban) are skipped with a platform-aware rationale rather than emitting misleading FAILs with Ubuntu remediation text. `scripts/install.sh` on macOS still applies file-permission hardening only; native macOS hardening modules (firewall, SSH, logging policy) are tracked in [GitHub issues](https://github.com/oscarsixsecllc/sarge/issues). **Windows is detection-only today** — `assessment/assess.ps1` runs read-only PowerShell probes that capture enterprise context (domain / AAD join, Intune enrollment, GPO, AppLocker, WDAC, Defender) so downstream OpenClaw-on-Windows control checks can defer to your existing control authority where appropriate. Per-control Windows checks land one PR at a time under [#12](https://github.com/oscarsixsecllc/sarge/issues/12). Sarge on Windows is scoped to OpenClaw deployment hardening — it is not a generic Windows hardening tool. Roadmap is tracked in [GitHub issues](https://github.com/oscarsixsecllc/sarge/issues).
+> **Platform support status:** Full coverage on Ubuntu 22.04 / 24.04 LTS today. On macOS, gap analysis (`assessment/assess.sh`) and drift detection (`drift/snapshot.sh`, `drift/compare.sh`) now run natively — controls with a clean macOS analog (filesystem, accounts, firewall, listening ports, SSH, integrity checksums, session timeout) are evaluated; controls rooted in Linux-only facilities (auditd / pam_faillock / pwquality / login.defs / apt / unattended-upgrades / clamav / fail2ban) are skipped with a platform-aware rationale rather than emitting misleading FAILs with Ubuntu remediation text. `scripts/install.sh` on macOS still applies file-permission hardening only; native macOS hardening modules (firewall, SSH, logging policy) are tracked in [GitHub issues](https://github.com/oscarsixsecllc/sarge/issues). **Windows now has detection + recommendation coverage across all six 800-53 families (AC, AU, CM, IA, SC, SI)** via `assessment/assess.ps1` — read-only PowerShell probes capture enterprise context (domain / AAD join, Intune enrollment, GPO, AppLocker, WDAC, Defender) AND per-control verdicts with concrete remediation steps. Findings on domain-joined hosts are tagged "may be overridden by GPO" pending the `--inspect-gpo` mode follow-up. Pester tests live under `tests/Pester/windows-*.Tests.ps1` (mocked cmdlets; run locally via `Invoke-Pester -Path tests/Pester`; no CI workflow wired up yet). Windows hardening (Phase 2) is gated on the pre-hardening backup features tracked in [#28](https://github.com/oscarsixsecllc/sarge/issues/28) (Windows), [#29](https://github.com/oscarsixsecllc/sarge/issues/29) (Ubuntu), and [#30](https://github.com/oscarsixsecllc/sarge/issues/30) (macOS). Sarge on Windows is scoped to OpenClaw deployment hardening — it is not a generic Windows hardening tool. Roadmap is tracked under parent issue [#12](https://github.com/oscarsixsecllc/sarge/issues/12).
 
 > **Why SC and SI are partial:**
 > 
