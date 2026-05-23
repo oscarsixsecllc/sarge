@@ -38,11 +38,20 @@ STATE_DIR="${SARGE_STATE_DIR:-$HOME/.sarge/state}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_BASE="${REPORT_DIR}/sarge-report-${TIMESTAMP}"
 
+# Per-run folder layout (mirrors the Windows port — PR #32, issue #34).
+# Every artifact for THIS run lands under $SARGE_RUN_ROOT in addition to
+# the legacy $REPORT_DIR / $STATE_DIR paths, so downstream consumers that
+# read from the old locations keep working while new tooling can rely on
+# a single self-contained per-run directory.
+SARGE_RUN_ID="${SARGE_RUN_ID:-$TIMESTAMP}"
+SARGE_RUN_ROOT="${SARGE_RUN_ROOT:-$HOME/.sarge/runs/$SARGE_RUN_ID}"
+export SARGE_RUN_ID SARGE_RUN_ROOT
+
 # Counters
 PASS=0; WARN=0; FAIL=0; SKIP=0
 declare -a RESULTS=()
 
-mkdir -p "$REPORT_DIR" "$STATE_DIR"
+mkdir -p "$REPORT_DIR" "$STATE_DIR" "$SARGE_RUN_ROOT"
 
 # Initialize install timestamp on first run
 INSTALLED_AT_FILE="$STATE_DIR/installed-at.txt"
@@ -108,7 +117,10 @@ log "======================================"
   --output "$REPORT_BASE" \
   --report-dir "$REPORT_DIR" \
   --state-dir "$STATE_DIR" \
+  --run-root "$SARGE_RUN_ROOT" \
+  --run-id "$SARGE_RUN_ID" \
   --catalog "$SCRIPT_DIR/findings-catalog.json" \
   --results "$(printf '%s\n' "${RESULTS[@]}")" || true
 
 log "Reports written to: $REPORT_BASE.md and $REPORT_BASE.json"
+log "Run folder: $SARGE_RUN_ROOT"

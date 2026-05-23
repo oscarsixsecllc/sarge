@@ -18,6 +18,15 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 SNAPSHOT_FILE="$SNAPSHOT_DIR/snapshot-${TIMESTAMP}.json"
 mkdir -p "$SNAPSHOT_DIR"
 
+# Per-run folder layout (issue #34). When the caller hasn't already
+# established a run root (e.g. snapshot.sh invoked standalone, outside
+# assess.sh), create one here so the snapshot lands in a self-contained
+# folder under ~/.sarge/runs/.
+SARGE_RUN_ID="${SARGE_RUN_ID:-$TIMESTAMP}"
+SARGE_RUN_ROOT="${SARGE_RUN_ROOT:-$HOME/.sarge/runs/$SARGE_RUN_ID}"
+mkdir -p "$SARGE_RUN_ROOT"
+export SARGE_RUN_ID SARGE_RUN_ROOT
+
 echo "[Sarge] Taking baseline snapshot..."
 
 # Platform-specific fields are emitted by `platform drift_snapshot_fields`
@@ -39,3 +48,9 @@ EOF
 
 echo "[Sarge] Snapshot saved: $SNAPSHOT_FILE"
 ln -sf "$SNAPSHOT_FILE" "$SNAPSHOT_DIR/latest.json"
+
+# Mirror into the per-run folder. compare.sh still reads from the legacy
+# SNAPSHOT_DIR/latest.json so the baseline survives across runs — the
+# in-run copy is for archival/self-contained-run-folder purposes only.
+cp "$SNAPSHOT_FILE" "$SARGE_RUN_ROOT/drift-snapshot.json"
+echo "[Sarge] Run folder: $SARGE_RUN_ROOT"
