@@ -79,7 +79,10 @@ Describe 'Get-SargeMdmPolicyInventory' {
         # against the literal path string instead.
         Mock Test-Path { $false } -ParameterFilter { $LiteralPath -eq 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device' }
         $r = Get-SargeMdmPolicyInventory
-        $r            | Should -Not -BeNullOrEmpty
+        # An empty hashtable is the contract (not $null), but Should
+        # -Not -BeNullOrEmpty treats @{} as empty - so test the type and
+        # key count explicitly.
+        $r            | Should -BeOfType [hashtable]
         $r.Keys.Count | Should -Be 0
     }
 
