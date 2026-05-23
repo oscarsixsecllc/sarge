@@ -116,3 +116,54 @@ Invoke-SargeCheck -Id 'WIN-SI-7-wdac-policy' -Family 'SI' -ControlId 'SI-7' -Che
             -Recommendation 'WDAC is optional for SI-7; if required by your baseline, deploy via CITool or Intune.'
     }
 }
+
+# SI-5: security alerts pipeline - WSUS + Defender sample submission
+Invoke-SargeCheck -Id 'WIN-SI-5-update-reporting' -Family 'SI' -ControlId 'SI-5' -Check {
+    $r = Get-SargeSiUpdateReporting
+    $wsusSet = (-not [string]::IsNullOrWhiteSpace([string]$r.wsus_status_server))
+    $sampleOk = ($null -ne $r.submit_samples_consent -and $r.submit_samples_consent -ge 1)
+    if ($wsusSet -or $sampleOk) {
+        Add-SargeFinding -Id 'WIN-SI-5-update-reporting' -Family 'SI' -ControlId 'SI-5' `
+            -Verdict 'PASS' `
+            -Message ("Security alerts pipeline: wsus_status_server set=$wsusSet; SubmitSamplesConsent=$($r.submit_samples_consent)")
+    } else {
+        Add-SargeFinding -Id 'WIN-SI-5-update-reporting' -Family 'SI' -ControlId 'SI-5' `
+            -Verdict 'WARN' `
+            -Message 'No WSUS status server configured AND Defender sample submission disabled - host is not reporting security telemetry' `
+            -Recommendation 'GPO > Windows Update > Specify intranet Microsoft update service location, or Set-MpPreference -SubmitSamplesConsent 1 (elevated).'
+    }
+}
+
+# SI-8: spam protection - informational unless a mail role is present
+Invoke-SargeCheck -Id 'WIN-SI-8-spam-protection' -Family 'SI' -ControlId 'SI-8' -Check {
+    $r = Get-SargeSiMailRole
+    if ($r.mail_role_detected) {
+        Add-SargeFinding -Id 'WIN-SI-8-spam-protection' -Family 'SI' -ControlId 'SI-8' `
+            -Verdict 'WARN' `
+            -Message ("Mail-role services detected (" + ($r.mail_role_services_present -join ', ') + "); SI-8 applies - verify spam protection deployed") `
+            -Recommendation 'Deploy server-side spam protection (Exchange anti-spam transport agent or third-party gateway).'
+    } else {
+        Add-SargeFinding -Id 'WIN-SI-8-spam-protection' -Family 'SI' -ControlId 'SI-8' `
+            -Verdict 'SKIP-CONTEXT-DEFERRED' `
+            -Message 'No mail role detected on host; SI-8 N/A for this asset (informational)'
+    }
+}
+
+# SI-16: memory protection - DEP / ASLR / CFG / image-signing
+Invoke-SargeCheck -Id 'WIN-SI-16-memory-protection' -Family 'SI' -ControlId 'SI-16' -Check {
+    $r = Get-SargeSiMemoryProtection
+    $issues = @()
+    if ($null -eq $r.dep -or $r.dep -notmatch '(?i)ON|TRUE|ENABLE') { $issues += "DEP=$($r.dep)" }
+    if ($null -eq $r.aslr_force_relocate -or $r.aslr_force_relocate -notmatch '(?i)ON|TRUE|ENABLE') { $issues += "ASLR ForceRelocate=$($r.aslr_force_relocate)" }
+    if ($null -eq $r.cfg -or $r.cfg -notmatch '(?i)ON|TRUE|ENABLE') { $issues += "CFG=$($r.cfg)" }
+    if ($issues.Count -eq 0) {
+        Add-SargeFinding -Id 'WIN-SI-16-memory-protection' -Family 'SI' -ControlId 'SI-16' `
+            -Verdict 'PASS' `
+            -Message ("Memory protection enabled system-wide: DEP=$($r.dep), ASLR=$($r.aslr_force_relocate), CFG=$($r.cfg)")
+    } else {
+        Add-SargeFinding -Id 'WIN-SI-16-memory-protection' -Family 'SI' -ControlId 'SI-16' `
+            -Verdict 'WARN' `
+            -Message ('System-wide ProcessMitigation gaps: ' + ($issues -join '; ')) `
+            -Recommendation 'Set-ProcessMitigation -System -Enable DEP,ForceRelocateImages,CFG (elevated). Review Get-ProcessMitigation -System for full set.'
+    }
+}

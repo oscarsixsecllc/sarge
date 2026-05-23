@@ -79,3 +79,77 @@ Invoke-SargeCheck -Id 'WIN-CM-8-software-inventory' -Family 'CM' -ControlId 'CM-
         $r.items | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $runInvPath -Encoding UTF8
     }
 }
+
+# CM-2: Windows baseline configuration drift
+Invoke-SargeCheck -Id 'WIN-CM-2-baseline-drift' -Family 'CM' -ControlId 'CM-2' -Check {
+    $r = Get-SargeCmBaselineSnapshot
+    $baselineDir = Join-Path $env:USERPROFILE '.sarge\state'
+    if (-not (Test-Path -LiteralPath $baselineDir)) {
+        New-Item -ItemType Directory -Path $baselineDir -Force | Out-Null
+    }
+    $baselinePath = Join-Path $baselineDir 'windows-baseline.json'
+
+    if (-not (Test-Path -LiteralPath $baselinePath)) {
+        $r | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $baselinePath -Encoding UTF8
+        Add-SargeFinding -Id 'WIN-CM-2-baseline-drift' -Family 'CM' -ControlId 'CM-2' `
+            -Verdict 'PASS' `
+            -Message ("Baseline captured at $baselinePath (services=$($r.services_running.Count), tasks=$($r.scheduled_tasks.Count), reg keys=$($r.registry_digest.Keys.Count))")
+        return
+    }
+
+    try {
+        $prev = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json
+    } catch {
+        Add-SargeFinding -Id 'WIN-CM-2-baseline-drift' -Family 'CM' -ControlId 'CM-2' `
+            -Verdict 'UNTESTED' `
+            -Message "Could not parse existing baseline at $baselinePath ($($_.Exception.Message)); re-run to recapture" `
+            -Recommendation "Remove $baselinePath and re-run assess.ps1 to recapture the baseline."
+        return
+    }
+
+    $prevServices = @($prev.services_running)
+    $prevTasks    = @($prev.scheduled_tasks)
+    $addedServices   = @($r.services_running | Where-Object { $_ -notin $prevServices })
+    $removedServices = @($prevServices       | Where-Object { $_ -notin $r.services_running })
+    $addedTasks      = @($r.scheduled_tasks  | Where-Object { $_ -notin $prevTasks })
+    $removedTasks    = @($prevTasks          | Where-Object { $_ -notin $r.scheduled_tasks })
+    $regDrift = @()
+    foreach ($k in $r.registry_digest.Keys) {
+        $prevVal = $null
+        if ($prev.registry_digest.PSObject.Properties[$k]) { $prevVal = [string]$prev.registry_digest.$k }
+        if ($prevVal -ne $r.registry_digest[$k]) { $regDrift += $k }
+    }
+    $total = $addedServices.Count + $removedServices.Count + $addedTasks.Count + $removedTasks.Count + $regDrift.Count
+    if ($total -eq 0) {
+        Add-SargeFinding -Id 'WIN-CM-2-baseline-drift' -Family 'CM' -ControlId 'CM-2' `
+            -Verdict 'PASS' `
+            -Message ("No drift vs $baselinePath (captured " + [string]$prev.captured_at + ")")
+    } else {
+        $parts = @()
+        if ($addedServices.Count   -gt 0) { $parts += "services +[" + ($addedServices   -join ',') + "]" }
+        if ($removedServices.Count -gt 0) { $parts += "services -[" + ($removedServices -join ',') + "]" }
+        if ($addedTasks.Count      -gt 0) { $parts += "tasks +$($addedTasks.Count)" }
+        if ($removedTasks.Count    -gt 0) { $parts += "tasks -$($removedTasks.Count)" }
+        if ($regDrift.Count        -gt 0) { $parts += "reg drift: " + ($regDrift -join '; ') }
+        Add-SargeFinding -Id 'WIN-CM-2-baseline-drift' -Family 'CM' -ControlId 'CM-2' `
+            -Verdict 'WARN' `
+            -Message ("Configuration drift detected: " + ($parts -join ' | ')) `
+            -Recommendation "Review the changes. If intentional, refresh the baseline: Remove-Item $baselinePath; re-run assess.ps1"
+    }
+}
+
+# CM-11: user-installed software policy
+Invoke-SargeCheck -Id 'WIN-CM-11-user-installed-software' -Family 'CM' -ControlId 'CM-11' -Check {
+    $r = Get-SargeCmUserInstalledSoftware
+    if ($r.appx_count -eq 0 -and $r.hkcu_installed_count -eq 0) {
+        Add-SargeFinding -Id 'WIN-CM-11-user-installed-software' -Family 'CM' -ControlId 'CM-11' `
+            -Verdict 'PASS' `
+            -Message 'No user-installed AppX or HKCU uninstall entries detected'
+    } else {
+        $verdict = if ($gpoPresent) { 'ENFORCED-EXTERNALLY' } else { 'WARN' }
+        Add-SargeFinding -Id 'WIN-CM-11-user-installed-software' -Family 'CM' -ControlId 'CM-11' `
+            -Verdict $verdict `
+            -Message ("User-installed software present: AppX=$($r.appx_count), HKCU-uninstall=$($r.hkcu_installed_count)") `
+            -Recommendation 'Confirm an allow-list / Store policy exists. GPO: Computer > Admin Templates > Windows Components > Store > Turn off the Store application.'
+    }
+}

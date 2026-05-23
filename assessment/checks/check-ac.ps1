@@ -132,3 +132,88 @@ Invoke-SargeCheck -Id 'WIN-AC-11-idle-lock' -Family 'AC' -ControlId 'AC-11' -Che
             -Recommendation 'Settings > Personalization > Lock screen > Screen saver: set wait <= 15 min and "On resume, display logon screen".'
     }
 }
+
+$gpoPresentLocal = $false
+if ($null -ne $ctx) { $gpoPresentLocal = [bool]$ctx.enterprise_context.gpo_present }
+
+# AC-8: legal logon notification banner present
+Invoke-SargeCheck -Id 'WIN-AC-8-legal-banner' -Family 'AC' -ControlId 'AC-8' -Check {
+    $r = Get-SargeAcLegalBanner
+    if ($r.caption_length -gt 0 -and $r.text_length -gt 0) {
+        Add-SargeFinding -Id 'WIN-AC-8-legal-banner' -Family 'AC' -ControlId 'AC-8' `
+            -Verdict 'PASS' `
+            -Message ("Legal logon banner configured (caption '$($r.caption)', text $($r.text_length) chars)")
+    } else {
+        $verdict = if ($intuneManaged -or $gpoPresentLocal) { 'ENFORCED-EXTERNALLY' } else { 'FAIL' }
+        $msg = if ($verdict -eq 'ENFORCED-EXTERNALLY') {
+            "Legal banner caption/text missing locally - likely supplied by GPO/Intune (caption_length=$($r.caption_length), text_length=$($r.text_length))"
+        } else {
+            "No legal logon banner configured (caption_length=$($r.caption_length), text_length=$($r.text_length))"
+        }
+        Add-SargeFinding -Id 'WIN-AC-8-legal-banner' -Family 'AC' -ControlId 'AC-8' `
+            -Verdict $verdict `
+            -Message $msg `
+            -Recommendation 'secpol.msc > Local Policies > Security Options > Interactive logon: Message title/text for users attempting to log on.'
+    }
+}
+
+# AC-12: session termination - SMB autodisconnect
+Invoke-SargeCheck -Id 'WIN-AC-12-session-termination' -Family 'AC' -ControlId 'AC-12' -Check {
+    $r = Get-SargeAcSessionTermination
+    if ($null -eq $r.autodisconnect_minutes) {
+        Add-SargeFinding -Id 'WIN-AC-12-session-termination' -Family 'AC' -ControlId 'AC-12' `
+            -Verdict 'PASS' `
+            -Message 'LanmanServer autodisconnect not explicitly set (Windows default: 15 min)'
+        return
+    }
+    if ($r.autodisconnect_minutes -lt 0) {
+        $verdict = if ($gpoPresentLocal) { 'ENFORCED-EXTERNALLY' } else { 'FAIL' }
+        Add-SargeFinding -Id 'WIN-AC-12-session-termination' -Family 'AC' -ControlId 'AC-12' `
+            -Verdict $verdict `
+            -Message "LanmanServer autodisconnect=$($r.autodisconnect_minutes) (never disconnect)" `
+            -Recommendation 'Set HKLM:\System\CurrentControlSet\Services\LanmanServer\Parameters\autodisconnect to 15 (minutes).'
+    } elseif ($r.autodisconnect_minutes -le 15) {
+        Add-SargeFinding -Id 'WIN-AC-12-session-termination' -Family 'AC' -ControlId 'AC-12' `
+            -Verdict 'PASS' `
+            -Message "LanmanServer autodisconnect=$($r.autodisconnect_minutes) min (<=15)"
+    } else {
+        Add-SargeFinding -Id 'WIN-AC-12-session-termination' -Family 'AC' -ControlId 'AC-12' `
+            -Verdict 'WARN' `
+            -Message "LanmanServer autodisconnect=$($r.autodisconnect_minutes) min (recommend <=15)" `
+            -Recommendation 'Lower the autodisconnect minute value to 15 or less.'
+    }
+}
+
+# AC-17: RDP remote access posture
+Invoke-SargeCheck -Id 'WIN-AC-17-rdp-posture' -Family 'AC' -ControlId 'AC-17' -Check {
+    $r = Get-SargeAcRdpPosture
+    if ($r.rdp_disabled) {
+        Add-SargeFinding -Id 'WIN-AC-17-rdp-posture' -Family 'AC' -ControlId 'AC-17' `
+            -Verdict 'PASS' `
+            -Message 'RDP disabled (fDenyTSConnections=1) - no remote access surface'
+        return
+    }
+    $issues = @()
+    if ($null -eq $r.user_authentication) {
+        $issues += 'UserAuthentication unset'
+    } elseif (-not $r.nla_required) {
+        $issues += "NLA disabled (UserAuthentication=$($r.user_authentication))"
+    }
+    if ($null -ne $r.min_encryption_level -and $r.min_encryption_level -lt 3) {
+        $issues += "MinEncryptionLevel=$($r.min_encryption_level) (<3 = below High)"
+    }
+    if ($null -ne $r.security_layer -and $r.security_layer -lt 2) {
+        $issues += "SecurityLayer=$($r.security_layer) (<2 = pre-CredSSP/TLS)"
+    }
+    if ($issues.Count -eq 0) {
+        Add-SargeFinding -Id 'WIN-AC-17-rdp-posture' -Family 'AC' -ControlId 'AC-17' `
+            -Verdict 'PASS' `
+            -Message "RDP NLA required, MinEncryption=$($r.min_encryption_level), SecurityLayer=$($r.security_layer)"
+    } else {
+        $verdict = if ($gpoPresentLocal) { 'ENFORCED-EXTERNALLY' } else { 'FAIL' }
+        Add-SargeFinding -Id 'WIN-AC-17-rdp-posture' -Family 'AC' -ControlId 'AC-17' `
+            -Verdict $verdict `
+            -Message ('RDP posture issues: ' + ($issues -join '; ')) `
+            -Recommendation 'Set RDP-Tcp UserAuthentication=1; MinEncryptionLevel=3; SecurityLayer=2 (elevated). Or disable RDP if not needed.'
+    }
+}

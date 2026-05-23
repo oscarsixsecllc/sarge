@@ -117,3 +117,52 @@ Invoke-SargeCheck -Id 'WIN-IA-11-reauth' -Family 'IA' -ControlId 'IA-11' -Check 
             -Recommendation 'Set InactivityTimeoutSecs to <= 900 via Group Policy / secpol.msc.'
     }
 }
+
+$intuneManaged = $false
+if ($null -ne $ctx) { $intuneManaged = [bool]$ctx.enterprise_context.intune_managed }
+
+# IA-3: device identification + authentication (TPM + Secure Boot)
+Invoke-SargeCheck -Id 'WIN-IA-3-device-id' -Family 'IA' -ControlId 'IA-3' -Check {
+    $r = Get-SargeIaDeviceIdentity
+    if ($null -eq $r.tpm_present -and $null -eq $r.secure_boot) {
+        Add-SargeFinding -Id 'WIN-IA-3-device-id' -Family 'IA' -ControlId 'IA-3' `
+            -Verdict 'UNTESTED' `
+            -Message 'Neither Get-Tpm nor Confirm-SecureBootUEFI returned data (legacy BIOS or stripped SKU?)' `
+            -Recommendation 'Verify in firmware that TPM and Secure Boot are enabled; on legacy BIOS hosts IA-3 may require alternate device-attestation evidence.'
+        return
+    }
+    $issues = @()
+    if ($null -ne $r.tpm_present -and -not $r.tpm_present) { $issues += 'TPM not present' }
+    elseif ($null -ne $r.tpm_ready -and -not $r.tpm_ready) { $issues += 'TPM not Ready' }
+    if ($null -ne $r.secure_boot -and -not $r.secure_boot) { $issues += 'Secure Boot disabled' }
+    if ($issues.Count -eq 0) {
+        Add-SargeFinding -Id 'WIN-IA-3-device-id' -Family 'IA' -ControlId 'IA-3' `
+            -Verdict 'PASS' `
+            -Message ("TPM present=$($r.tpm_present), ready=$($r.tpm_ready); SecureBoot=$($r.secure_boot)")
+    } else {
+        Add-SargeFinding -Id 'WIN-IA-3-device-id' -Family 'IA' -ControlId 'IA-3' `
+            -Verdict 'FAIL' `
+            -Message ('Device identity gaps: ' + ($issues -join '; ')) `
+            -Recommendation 'Enable TPM + Secure Boot in firmware; ensure Get-Tpm TpmReady=True and Confirm-SecureBootUEFI=True.'
+    }
+}
+
+# IA-12: identity proofing via Windows Hello / NGC
+Invoke-SargeCheck -Id 'WIN-IA-12-windows-hello' -Family 'IA' -ControlId 'IA-12' -Check {
+    $r = Get-SargeIaWindowsHello
+    if ($r.policy_present) {
+        Add-SargeFinding -Id 'WIN-IA-12-windows-hello' -Family 'IA' -ControlId 'IA-12' `
+            -Verdict 'PASS' `
+            -Message 'PassportForWork (Windows Hello for Business) policy present'
+    } elseif ($intuneManaged) {
+        Add-SargeFinding -Id 'WIN-IA-12-windows-hello' -Family 'IA' -ControlId 'IA-12' `
+            -Verdict 'ENFORCED-EXTERNALLY' `
+            -Message 'No PassportForWork policy locally; identity proofing likely enforced at AAD/Intune layer' `
+            -Recommendation 'Verify via Intune > Endpoint Security > Account protection that Windows Hello is policy-deployed.'
+    } else {
+        Add-SargeFinding -Id 'WIN-IA-12-windows-hello' -Family 'IA' -ControlId 'IA-12' `
+            -Verdict 'WARN' `
+            -Message ("No Windows Hello policy and no MDM enforcement detected (ngc_dir_present=$($r.ngc_dir_present))") `
+            -Recommendation 'Settings > Accounts > Sign-in options > Windows Hello. For managed hosts, deploy via Intune.'
+    }
+}
