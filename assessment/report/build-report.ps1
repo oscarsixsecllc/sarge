@@ -56,13 +56,22 @@ function Build-SargeReport {
     }
 
     # Load context. Tolerate missing.
+    # Use is_in_managed_domain for the legacy AAD-or-AD union (what this
+    # report's "domain-joined" header has always meant). If the field
+    # isn't present (older context JSON), fall back to the OR of the two
+    # specific fields.
     $ctxPath = Join-Path $StateDir 'windows-context.json'
     $isDomainJoined = $false
     $contextJson = $null
     if (Test-Path -LiteralPath $ctxPath) {
         try {
             $contextJson = Get-Content -LiteralPath $ctxPath -Raw | ConvertFrom-Json
-            $isDomainJoined = [bool]$contextJson.enterprise_context.is_domain_joined
+            $ec = $contextJson.enterprise_context
+            if ($null -ne $ec.is_in_managed_domain) {
+                $isDomainJoined = [bool]$ec.is_in_managed_domain
+            } else {
+                $isDomainJoined = ([bool]$ec.is_domain_joined) -or ([bool]$ec.is_aad_joined)
+            }
         } catch { }
     }
 
