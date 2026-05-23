@@ -91,3 +91,67 @@ Invoke-SargeCheck -Id 'WIN-AU-9-security-log-acl' -Family 'AU' -ControlId 'AU-9'
             -Recommendation 'Reset via: icacls "%SystemRoot%\System32\Winevt\Logs\Security.evtx" /reset (elevated)'
     }
 }
+
+# AU-3: audit record content - Sysmon config richness check
+Invoke-SargeCheck -Id 'WIN-AU-3-sysmon-config' -Family 'AU' -ControlId 'AU-3' -Check {
+    $r = Get-SargeAuSysmonConfig
+    if (-not $r.installed) {
+        Add-SargeFinding -Id 'WIN-AU-3-sysmon-config' -Family 'AU' -ControlId 'AU-3' `
+            -Verdict 'SKIP-CONTEXT-DEFERRED' `
+            -Message 'Sysmon not installed - AU-3 audit-record-content depth check skipped (default Windows event fields apply)' `
+            -Recommendation 'Install Sysmon with a published config (e.g. sysmon-modular) to enrich audit-record content (AU-3).'
+        return
+    }
+    if ($r.rules_bytes -gt 0 -or $null -ne $r.config_hash) {
+        Add-SargeFinding -Id 'WIN-AU-3-sysmon-config' -Family 'AU' -ControlId 'AU-3' `
+            -Verdict 'PASS' `
+            -Message "Sysmon present with config (rules_bytes=$($r.rules_bytes), hash present=$([bool]$r.config_hash))"
+    } else {
+        Add-SargeFinding -Id 'WIN-AU-3-sysmon-config' -Family 'AU' -ControlId 'AU-3' `
+            -Verdict 'WARN' `
+            -Message 'Sysmon installed but no config rules detected in service registry parameters' `
+            -Recommendation 'Apply a config: sysmon -accepteula -i <config.xml>  (elevated)'
+    }
+}
+
+# AU-6: SIEM / Windows Event Forwarding configured?
+Invoke-SargeCheck -Id 'WIN-AU-6-event-forwarding' -Family 'AU' -ControlId 'AU-6' -Check {
+    $r = Get-SargeAuEventForwarding
+    if ($r.subscription_count -gt 0) {
+        Add-SargeFinding -Id 'WIN-AU-6-event-forwarding' -Family 'AU' -ControlId 'AU-6' `
+            -Verdict 'PASS' `
+            -Message ("WEF SubscriptionManager configured ($($r.subscription_count) URL(s))")
+    } else {
+        $verdict = if ($gpoPresent) { 'ENFORCED-EXTERNALLY' } else { 'WARN' }
+        Add-SargeFinding -Id 'WIN-AU-6-event-forwarding' -Family 'AU' -ControlId 'AU-6' `
+            -Verdict $verdict `
+            -Message 'No Windows Event Forwarding subscription manager URL set (no SIEM/WEF collector configured locally)' `
+            -Recommendation 'Configure WEF via GPO > Windows Components > Event Forwarding > Configure target Subscription Manager.'
+    }
+}
+
+# AU-8: time stamps - W32Time authoritative source
+Invoke-SargeCheck -Id 'WIN-AU-8-time-config' -Family 'AU' -ControlId 'AU-8' -Check {
+    $r = Get-SargeAuTimeConfig
+    if ($null -eq $r.type) {
+        Add-SargeFinding -Id 'WIN-AU-8-time-config' -Family 'AU' -ControlId 'AU-8' `
+            -Verdict 'UNTESTED' `
+            -Message 'w32tm /query /configuration returned no parseable Type line'
+        return
+    }
+    if ($r.type -ieq 'NoSync') {
+        Add-SargeFinding -Id 'WIN-AU-8-time-config' -Family 'AU' -ControlId 'AU-8' `
+            -Verdict 'FAIL' `
+            -Message "W32Time Type=NoSync (no time synchronization)" `
+            -Recommendation 'w32tm /config /syncfromflags:manual /manualpeerlist:"time.windows.com,0x1" /update; net stop w32time && net start w32time (elevated).'
+    } elseif ($r.type -ieq 'NTP' -or $r.type -ieq 'NT5DS' -or $r.type -ieq 'AllSync') {
+        Add-SargeFinding -Id 'WIN-AU-8-time-config' -Family 'AU' -ControlId 'AU-8' `
+            -Verdict 'PASS' `
+            -Message "W32Time Type=$($r.type); NtpServer=$($r.ntp_server)"
+    } else {
+        Add-SargeFinding -Id 'WIN-AU-8-time-config' -Family 'AU' -ControlId 'AU-8' `
+            -Verdict 'WARN' `
+            -Message "W32Time Type=$($r.type) (unrecognized - review)" `
+            -Recommendation 'Verify w32tm /query /status returns Source = an authoritative NTP server.'
+    }
+}

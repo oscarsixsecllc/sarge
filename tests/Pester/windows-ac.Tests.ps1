@@ -82,3 +82,54 @@ Describe 'Get-SargeAcAdminGroupMembers' {
         $r.members | Should -Contain 'HOST\oscar'
     }
 }
+
+Describe 'Get-SargeAcLegalBanner' {
+    It 'reports lengths when banner registry values are present' {
+        Mock Get-ItemProperty {
+            [pscustomobject]@{
+                LegalNoticeCaption = 'AUTHORIZED USE ONLY'
+                LegalNoticeText    = 'By accessing this system you consent to monitoring.'
+            }
+        }
+        $r = Get-SargeAcLegalBanner
+        $r.caption_length | Should -BeGreaterThan 0
+        $r.text_length    | Should -BeGreaterThan 0
+    }
+    It 'reports zero lengths when banner keys missing' {
+        Mock Get-ItemProperty { throw 'not found' }
+        $r = Get-SargeAcLegalBanner
+        $r.caption_length | Should -Be 0
+        $r.text_length    | Should -Be 0
+    }
+}
+
+Describe 'Get-SargeAcSessionTermination' {
+    It 'reads autodisconnect value when present' {
+        Mock Get-ItemProperty { [pscustomobject]@{ autodisconnect = 15 } }
+        $r = Get-SargeAcSessionTermination
+        $r.autodisconnect_minutes | Should -Be 15
+    }
+    It 'returns null when key absent' {
+        Mock Get-ItemProperty { throw 'absent' }
+        $r = Get-SargeAcSessionTermination
+        $r.autodisconnect_minutes | Should -Be $null
+    }
+}
+
+Describe 'Get-SargeAcRdpPosture' {
+    It 'reports nla_required true when UserAuthentication=1' {
+        Mock Get-ItemProperty {
+            [pscustomobject]@{
+                UserAuthentication = 1
+                MinEncryptionLevel = 3
+                SecurityLayer      = 2
+                fDenyTSConnections = 0
+            }
+        }
+        $r = Get-SargeAcRdpPosture
+        $r.nla_required         | Should -Be $true
+        $r.min_encryption_level | Should -Be 3
+        $r.security_layer       | Should -Be 2
+        $r.rdp_disabled         | Should -Be $false
+    }
+}

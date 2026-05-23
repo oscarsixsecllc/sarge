@@ -40,3 +40,21 @@ Describe 'Get-SargeIaPasswordPolicy parsing' {
         $hist   | Should -Be 5
     }
 }
+
+Describe 'Get-SargeIaDeviceIdentity' {
+    It 'returns nulls when neither cmdlet is available' {
+        Mock Get-Command { $null }
+        $r = Get-SargeIaDeviceIdentity
+        $r.tpm_present | Should -Be $null
+        $r.secure_boot | Should -Be $null
+    }
+}
+
+Describe 'Get-SargeIaWindowsHello' {
+    It 'returns booleans for policy and ngc directory checks' {
+        Mock Test-Path { $false }
+        $r = Get-SargeIaWindowsHello
+        $r.policy_present  | Should -Be $false
+        $r.ngc_dir_present | Should -Be $false
+    }
+}

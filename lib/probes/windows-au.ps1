@@ -113,3 +113,73 @@ function Get-SargeAuSecurityLogAcl {
         error = $null
     }
 }
+
+# AU-3: audit record content surface - Sysmon coverage. If Sysmon service is
+# present, report whether the registry config carries rules.
+function Get-SargeAuSysmonConfig {
+    [CmdletBinding()] param()
+    $svc = Get-CimInstance -ClassName Win32_Service -Filter "Name='Sysmon' OR Name='Sysmon64'" -ErrorAction SilentlyContinue
+    if ($null -eq $svc) {
+        return [pscustomobject]@{ installed = $false; config_hash = $null; rules_bytes = 0 }
+    }
+    $hashHex = $null
+    $rulesCount = 0
+    foreach ($name in 'Sysmon','Sysmon64') {
+        $cfgKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$name\Parameters"
+        try {
+            $p = Get-ItemProperty -LiteralPath $cfgKey -ErrorAction Stop
+            if ($p.PSObject.Properties['ConfigHash']) {
+                $hashHex = [string]$p.ConfigHash
+            }
+            if ($p.PSObject.Properties['Rules']) {
+                $rulesCount = ([byte[]]$p.Rules).Length
+            }
+        } catch { }
+    }
+    return [pscustomobject]@{
+        installed   = $true
+        config_hash = $hashHex
+        rules_bytes = $rulesCount
+    }
+}
+
+# AU-6: audit review surface - WEF SubscriptionManager URLs.
+function Get-SargeAuEventForwarding {
+    [CmdletBinding()] param()
+    $key = 'HKLM:\Software\Policies\Microsoft\Windows\EventLog\EventForwarding\SubscriptionManager'
+    $subs = @()
+    try {
+        if (Test-Path -LiteralPath $key) {
+            $p = Get-ItemProperty -LiteralPath $key -ErrorAction Stop
+            foreach ($prop in $p.PSObject.Properties) {
+                if ($prop.Name -match '^\d+$') {
+                    $subs += [string]$prop.Value
+                }
+            }
+        }
+    } catch { }
+    return [pscustomobject]@{
+        subscription_count = $subs.Count
+        subscriptions      = $subs
+    }
+}
+
+# AU-8: time stamps - parse w32tm /query /configuration output.
+function Get-SargeAuTimeConfig {
+    [CmdletBinding()] param()
+    $raw = & w32tm.exe /query /configuration 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "w32tm /query /configuration exited $LASTEXITCODE (W32Time service not running?)"
+    }
+    $type     = $null
+    $ntpServer = $null
+    foreach ($line in $raw) {
+        if ($line -match '^\s*Type:\s*(\S+)') { $type = $Matches[1] }
+        elseif ($line -match '^\s*NtpServer:\s*(.+?)\s*(?:\(.*)?$') { $ntpServer = $Matches[1].Trim() }
+    }
+    return [pscustomobject]@{
+        type       = $type
+        ntp_server = $ntpServer
+        raw        = ($raw -join "`n")
+    }
+}

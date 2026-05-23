@@ -29,3 +29,30 @@ Describe 'Get-SargeCmLegacyServices' {
         $r.running | Should -Contain 'Telnet'
     }
 }
+
+Describe 'Get-SargeCmBaselineSnapshot' {
+    It 'returns a snapshot with running services' {
+        Mock Get-CimInstance {
+            @(
+                [pscustomobject]@{ Name='Spooler';   State='Running' }
+                [pscustomobject]@{ Name='WinDefend'; State='Running' }
+                [pscustomobject]@{ Name='Disabled';  State='Stopped' }
+            )
+        }
+        Mock Get-ScheduledTask { @() }
+        Mock Test-Path { $false }
+        $r = Get-SargeCmBaselineSnapshot
+        $r.services_running | Should -Contain 'Spooler'
+        $r.services_running | Should -Not -Contain 'Disabled'
+    }
+}
+
+Describe 'Get-SargeCmUserInstalledSoftware' {
+    It 'returns zero when no AppX/HKCU entries' {
+        Mock Get-AppxPackage { @() }
+        Mock Get-ItemProperty { throw 'no hkcu' }
+        $r = Get-SargeCmUserInstalledSoftware
+        $r.appx_count           | Should -Be 0
+        $r.hkcu_installed_count | Should -Be 0
+    }
+}
