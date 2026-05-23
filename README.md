@@ -304,6 +304,65 @@ tmutil restore <snapshot-id-from-summary.md>
 
 ---
 
+## Pre-hardening backup + rollback (Windows)
+
+Sarge's Phase 2 Windows hardening (`scripts/harden-*.ps1`, in flight) will
+mutate registry policy hives, local security policy, audit policy, service
+start types, and scheduled tasks. Before *any* of that runs, Sarge offers
+to capture a restorable snapshot via `scripts/backup-windows.ps1`. A
+misapplied control should never leave a host in an unrecoverable state.
+Closes [#28](https://github.com/oscarsixsecllc/sarge/issues/28).
+
+**Workflow (operator):**
+
+```powershell
+# 1. Capture the backup. Defaults to interactive consent.
+pwsh -ExecutionPolicy Bypass -File scripts\backup-windows.ps1
+
+# 2. (later) Apply hardening - Phase 2 modules will call backup-windows.ps1
+#    automatically with their assess.ps1 run-id.
+
+# 3. Roll back if anything regresses.
+pwsh -ExecutionPolicy Bypass -File scripts\rollback-windows.ps1 `
+    -BackupDir "$env:USERPROFILE\.sarge\runs\<run-id>\backup"
+```
+
+**What gets captured into `%USERPROFILE%\.sarge\runs\<run-id>\backup\`:**
+
+- A System Restore checkpoint named `Sarge pre-hardening <run-id>`.
+- `registry\*.reg` - one export per tracked policy hive (AC / AU / CM / SC / IA).
+- `secpol.cfg` - `secedit /export` of local security policy.
+- `audit-policy.csv` - `auditpol /backup` of audit policy.
+- `services.json` - `Get-Service` snapshot (Name / Status / StartType).
+- `tasks\*.xml` - `Export-ScheduledTask` for tasks under non-Microsoft paths.
+- `rollback.ps1` - auto-generated reverser keyed to what was actually captured.
+
+A `backup-summary.md` lands in the run folder with the exact rollback command.
+
+**Dependency: System Protection must be enabled.** If System Protection is
+off on `%SystemDrive%`, `backup-windows.ps1` fails loud with exit code 2 and
+the message *"Enable System Protection in System Properties -> System
+Protection -> Configure -> Turn on, then re-run"*. Sarge will **not**
+silently proceed without a checkpoint safety net. Pass `--skip-restore-point`
+to override (config-only snapshot, no restore point) - not recommended for
+production hosts.
+
+**Flags:**
+
+| Flag                    | Effect |
+|-------------------------|--------|
+| `--unattended`          | Skip the `[Y/n]` consent prompt (proceed). |
+| `--skip-restore-point`  | Bypass `Checkpoint-Computer`; still produce snapshots. |
+| `--run-id <id>`         | Use the supplied run-id (e.g. from `assess.ps1`). |
+
+Rollback is **idempotent** - re-running it when state already matches the
+snapshot performs no net change. Some surfaces (`HKLM\SYSTEM\...` keys,
+secedit, auditpol) require an **elevated** PowerShell to fully restore;
+non-elevated sessions will surface warnings on those steps but other
+artifacts still apply cleanly.
+
+---
+
 ## Repository Structure
 
 ```
