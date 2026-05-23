@@ -131,24 +131,39 @@ function Get-SargeWindowsContext {
         Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
     }
 
+    # `is_domain_joined` is reserved for traditional Active Directory join.
+    # AAD-only join is exposed separately as `is_aad_joined`. The OR-of-both
+    # legacy behaviour is preserved via the new `is_in_managed_domain` field
+    # so existing callers that need "any directory" semantics aren't broken,
+    # but new code should branch on the specific field that matches its
+    # control surface (AD has GPO, AAD has MDM CSP — they're not interchangeable).
     if ($dsreg) {
-        $isDomainJoined = ($dsreg.AzureAdJoined -or $dsreg.DomainJoined)
-        $domainName     = $dsreg.DomainName
-        $intuneManaged  = -not [string]::IsNullOrWhiteSpace($dsreg.MdmUrl)
+        $isDomainJoined    = [bool]$dsreg.DomainJoined
+        $isAadJoined       = [bool]$dsreg.AzureAdJoined
+        $domainName        = $dsreg.DomainName
+        $intuneManaged     = -not [string]::IsNullOrWhiteSpace($dsreg.MdmUrl)
     }
     elseif ($cimComputer) {
-        $isDomainJoined = [bool]$cimComputer.PartOfDomain
-        $domainName     = if ($cimComputer.PartOfDomain) { $cimComputer.Domain } else { $null }
-        $intuneManaged  = $null  # cannot detect Intune without dsregcmd
+        $isDomainJoined    = [bool]$cimComputer.PartOfDomain
+        $isAadJoined       = $null  # cannot detect AAD without dsregcmd
+        $domainName        = if ($cimComputer.PartOfDomain) { $cimComputer.Domain } else { $null }
+        $intuneManaged     = $null  # cannot detect Intune without dsregcmd
         if (-not $probeErrors.ContainsKey('intune_managed')) {
             $probeErrors['intune_managed'] = 'dsregcmd unavailable; cannot detect MDM enrollment without it'
         }
+        if (-not $probeErrors.ContainsKey('is_aad_joined')) {
+            $probeErrors['is_aad_joined'] = 'dsregcmd unavailable; cannot detect AAD join without it'
+        }
     }
     else {
-        $isDomainJoined = $null
-        $domainName     = $null
-        $intuneManaged  = $null
+        $isDomainJoined    = $null
+        $isAadJoined       = $null
+        $domainName        = $null
+        $intuneManaged     = $null
     }
+    $isInManagedDomain = if ($null -ne $isDomainJoined -or $null -ne $isAadJoined) {
+        [bool]$isDomainJoined -or [bool]$isAadJoined
+    } else { $null }
 
     # ---- gpresult: any applied GPOs? ----------------------------------------
     # gpresult /R /SCOPE:USER works as standard user (no elevation). We only
@@ -333,10 +348,12 @@ function Get-SargeWindowsContext {
             windows_build   = $windowsBuild
         }
         enterprise_context = [ordered]@{
-            is_domain_joined = $isDomainJoined
-            domain_name      = $domainName
-            intune_managed   = $intuneManaged
-            gpo_present      = $gpoPresent
+            is_domain_joined     = $isDomainJoined
+            is_aad_joined        = $isAadJoined
+            is_in_managed_domain = $isInManagedDomain
+            domain_name          = $domainName
+            intune_managed       = $intuneManaged
+            gpo_present          = $gpoPresent
         }
         active_controls    = [ordered]@{
             applocker_active           = $applockerActive
