@@ -256,11 +256,17 @@ function Export-SargeScheduledTasks {
         try {
             $xml = Export-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction Stop
             Set-Content -LiteralPath $file -Value $xml -Encoding UTF8
+            # File names are filename-safe slugs and lose the TaskPath/TaskName
+            # distinction. Rollback needs both — task names are NOT unique across
+            # TaskPath directories — so persist the manifest as JSON next to the
+            # XMLs. Rollback consumes this file (see scripts/rollback-windows.ps1).
             $manifest.Add([pscustomobject]@{ taskPath = $t.TaskPath; taskName = $t.TaskName; file = $file })
         } catch {
             Write-SargeLog "WARN: could not export task $($t.TaskPath)$($t.TaskName): $($_.Exception.Message)"
         }
     }
+    $manifestFile = Join-Path $taskDir 'manifest.json'
+    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestFile -Encoding UTF8
     return $manifest
 }
 

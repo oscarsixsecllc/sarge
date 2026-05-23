@@ -131,18 +131,44 @@ if (Test-Path -LiteralPath $svcFile) {
 }
 
 # 5) Scheduled tasks - re-register only if absent (idempotent).
+# Read the manifest emitted by backup-windows.ps1 so we know each XML's
+# original TaskPath. Task names are NOT unique across TaskPath directories,
+# so checking existence by name alone produces false positives (and re-
+# registering by name alone drops the task into root '\' instead of its
+# original folder). Fall back to a filename scan only when the manifest
+# is missing (e.g. backup produced by a pre-fix version of this tool).
 $taskDir = Join-Path $BackupDir 'tasks'
 if (Test-Path -LiteralPath $taskDir) {
-    foreach ($xml in Get-ChildItem -LiteralPath $taskDir -Filter '*.xml' -ErrorAction SilentlyContinue) {
-        $name = [System.IO.Path]::GetFileNameWithoutExtension($xml.Name)
-        $existing = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
-        if ($null -ne $existing) { continue }
-        Write-SargeLog "re-registering task $name"
+    $manifestFile = Join-Path $taskDir 'manifest.json'
+    $entries = @()
+    if (Test-Path -LiteralPath $manifestFile) {
         try {
-            $body = Get-Content -Raw -LiteralPath $xml.FullName
-            Register-ScheduledTask -Xml $body -TaskName $name -Force | Out-Null
+            $entries = @(Get-Content -Raw -LiteralPath $manifestFile | ConvertFrom-Json)
         } catch {
-            Write-Warning "could not re-register $name : $($_.Exception.Message)"
+            Write-Warning "tasks/manifest.json unreadable ($($_.Exception.Message)); falling back to filename scan"
+        }
+    }
+    if ($entries.Count -eq 0) {
+        # Legacy backup (no manifest) - synthesize entries from filenames.
+        # TaskPath unknown; check existence and re-register at root '\'.
+        foreach ($xml in Get-ChildItem -LiteralPath $taskDir -Filter '*.xml' -ErrorAction SilentlyContinue) {
+            $name = [System.IO.Path]::GetFileNameWithoutExtension($xml.Name)
+            $entries += [pscustomobject]@{ taskPath = '\'; taskName = $name; file = $xml.FullName }
+        }
+    }
+    foreach ($entry in $entries) {
+        $name = $entry.taskName
+        $path = $entry.taskPath
+        if ([string]::IsNullOrEmpty($path)) { $path = '\' }
+        if (-not $path.EndsWith('\')) { $path = $path + '\' }
+        $existing = Get-ScheduledTask -TaskName $name -TaskPath $path -ErrorAction SilentlyContinue
+        if ($null -ne $existing) { continue }
+        Write-SargeLog "re-registering task $path$name"
+        try {
+            $body = Get-Content -Raw -LiteralPath $entry.file
+            Register-ScheduledTask -Xml $body -TaskName $name -TaskPath $path -Force | Out-Null
+        } catch {
+            Write-Warning "could not re-register $path$name : $($_.Exception.Message)"
             $failures++
         }
     }
