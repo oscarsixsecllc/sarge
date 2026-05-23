@@ -93,8 +93,9 @@ foreach ($p in 'windows-ac','windows-au','windows-cm','windows-ia','windows-sc',
     . $path
 }
 
+$phaseTag = if ($InspectPolicy) { 'Phase 1a + 1b (policy overlay)' } else { 'Phase 1a' }
 Write-Output "[SARGE] ======================================"
-Write-Output "[SARGE]  Sarge - Windows assessment (Phase 1a)"
+Write-Output ("[SARGE]  Sarge - Windows assessment ({0})" -f $phaseTag)
 Write-Output "[SARGE]  Oscar Six Security LLC"
 Write-Output "[SARGE]  $(Get-Date)"
 Write-Output "[SARGE]  Host: $env:COMPUTERNAME"

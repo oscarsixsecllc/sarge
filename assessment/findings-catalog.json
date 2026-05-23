@@ -537,5 +537,21 @@
     "expected": "WDAC enforced or, at minimum, audit-mode policies present (per organizational baseline)",
     "why": "WDAC is the strongest application-control surface on Windows. NIST 800-53 SI-7 covers software integrity; WDAC enforces it at execution time.",
     "fix": "Deploy a WDAC policy via CITool or Intune. WDAC is optional but recommended for high-assurance hosts."
+  },
+  "WIN-POL-1": {
+    "family": "CM-2 - Baseline Configuration (policy enforcement surface)",
+    "what": "Host is AAD-joined but not enrolled in any MDM (Intune); MdmUrl is empty in dsregcmd /status output",
+    "expected": "AAD-joined hosts are enrolled in an MDM under the same tenant so configuration baselines are centrally enforced and drift can be remediated",
+    "why": "Azure AD join alone provides identity but no configuration enforcement. NIST 800-53 CM-2 requires a documented, enforced baseline; without MDM, the local registry is the only enforcement surface, so any local admin can drift the baseline silently. Sarge has no source of truth to overlay onto controls and cannot tell whether a local registry value reflects intent or accidental drift.",
+    "fix": "Enroll the device in Microsoft Intune (or another MDM) under the same AAD tenant. Settings > Accounts > Access work or school > Connect; or push enrollment via Conditional Access compliance policy. Tracked: oscarsixsecllc/sarge#31",
+    "severity": "high"
+  },
+  "WIN-POL-2": {
+    "family": "CM-6 - Configuration Settings",
+    "what": "Managed-policy inventory captured (MDM CSP registry, gpresult HTML, and/or Get-GPO) and written to the run folder as policy-inventory.json",
+    "expected": "Informational - this finding always passes when --inspect-policy successfully gathered any policy data; the side-output JSON is the artifact",
+    "why": "Capturing the applied-policy inventory is the precondition for the verdict-overlay in Phase 1b. The JSON document is also useful for audit evidence under CM-6 (record of configuration settings actually applied to the system).",
+    "fix": "Not applicable - informational only. Inspect policy-inventory.json in the run folder for the captured settings.",
+    "severity": "info"
   }
 }
