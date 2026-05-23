@@ -10,12 +10,11 @@
 BeforeAll {
     $repoRoot = (Resolve-Path "$PSScriptRoot\..\..").Path
     . "$repoRoot\lib\probes\windows-policy.ps1"
-    # NOTE: check-policy.ps1 is dot-sourced by assess.ps1 only after
-    # Invoke-SargeCheck is in scope, and it executes top-level Invoke-SargeCheck
-    # calls at load time. Loading it directly from a test crashes. The
-    # Apply-PolicyOverlay Describe below is -Skip'd until the test is rewritten
-    # to mock Invoke-SargeCheck or to source only the function definition.
-    # Tracked in follow-up issue (see PR #40).
+    # Apply-PolicyOverlay was extracted from assessment/checks/check-policy.ps1
+    # into lib/policy-overlay.ps1 (issue #41) so it can be dot-sourced here
+    # without the top-level Invoke-SargeCheck calls in the check script
+    # crashing Pester at load time.
+    . "$repoRoot\lib\policy-overlay.ps1"
 }
 
 Describe 'ConvertFrom-SargePolicyDsRegCmd' {
@@ -74,25 +73,28 @@ Describe 'Get-SargeMdmPolicyInventory' {
         $script:mockRoot = 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device'
     }
 
-    It 'returns empty hashtable when root key missing' -Skip {
-        # Skipped: Test-Path mock with -ParameterFilter on $LiteralPath does not
-        # match how Get-SargeMdmPolicyInventory invokes Test-Path (likely
-        # positional -Path arg). Tracked in #41.
-        Mock Test-Path { $false } -ParameterFilter { $LiteralPath -eq $script:mockRoot }
+    It 'returns empty hashtable when root key missing' {
+        # NOTE: Pester evaluates -ParameterFilter scriptblocks in a detached
+        # scope where $script:mockRoot does not resolve reliably; compare
+        # against the literal path string instead.
+        Mock Test-Path { $false } -ParameterFilter { $LiteralPath -eq 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device' }
         $r = Get-SargeMdmPolicyInventory
-        $r            | Should -Not -BeNullOrEmpty
+        # An empty hashtable is the contract (not $null), but Should
+        # -Not -BeNullOrEmpty treats @{} as empty - so test the type and
+        # key count explicitly.
+        $r            | Should -BeOfType [hashtable]
         $r.Keys.Count | Should -Be 0
     }
 
     It 'enumerates CSP areas and settings' {
-        Mock Test-Path { $true } -ParameterFilter { $LiteralPath -eq $script:mockRoot }
+        Mock Test-Path { $true } -ParameterFilter { $LiteralPath -eq 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device' }
         Mock Get-ChildItem {
             @(
                 [pscustomobject]@{ PSChildName='DeviceGuard'; PSPath='Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current\device\DeviceGuard' },
                 [pscustomobject]@{ PSChildName='DataProtection'; PSPath='Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current\device\DataProtection' }
             )
-        } -ParameterFilter { $LiteralPath -eq $script:mockRoot }
-        Mock Get-ChildItem { @() } -ParameterFilter { $LiteralPath -ne $script:mockRoot }
+        } -ParameterFilter { $LiteralPath -eq 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device' }
+        Mock Get-ChildItem { @() } -ParameterFilter { $LiteralPath -ne 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device' }
         Mock Get-ItemProperty {
             [pscustomobject]@{
                 EnableVirtualizationBasedSecurity = 1
@@ -109,7 +111,7 @@ Describe 'Get-SargeMdmPolicyInventory' {
     }
 }
 
-Describe 'Apply-PolicyOverlay' -Skip {
+Describe 'Apply-PolicyOverlay' {
     It 'flips matching Phase 1a FAIL to ENFORCED-EXTERNALLY when MDM enforces the control' {
         $findings = [System.Collections.Generic.List[object]]::new()
         $findings.Add([pscustomobject]@{
