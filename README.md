@@ -150,6 +150,90 @@ Sarge scripts use exit codes to signal *what they did*, not just *whether they s
 
 ---
 
+## Pre-hardening backup + rollback (macOS)
+
+> **Untested on real macOS hardware.** Oscar Six does not currently have
+> a Mac test surface available. The macOS backup + rollback scripts
+> (`scripts/backup-macos.sh`, `scripts/rollback-macos.sh`) follow the
+> issue [#30](https://github.com/oscarsixsecllc/sarge/issues/30) spec
+> and the Ubuntu/Windows backup patterns, but have only been exercised
+> via `bash -n` and a Linux dry-run smoke test
+> (`tests/integration/backup-macos-smoke.sh`). The macOS-specific
+> commands (`tmutil`, `pfctl`, `defaults`, `socketfilterfw`, `csrutil`,
+> `spctl`, `fdesetup`, `launchctl`) have **not** been validated against
+> live binaries. **Community validation contributions are welcome** —
+> open a PR or comment on issue #30 with results from a real Mac.
+
+Before any `harden-*.sh` runs on macOS, Sarge captures a layered backup
+so any change is reversible:
+
+1. **APFS local snapshot** (heavy-lift backstop) via `tmutil localsnapshot`.
+   Survives reboots, costs no extra disk until divergence, restorable
+   via `tmutil restore <snapshot-id>`. The script **fails loudly** if
+   the boot volume isn't APFS or local snapshots are disabled — it does
+   not silently proceed.
+2. **Optional Time Machine snapshot** via `tmutil startbackup --block`
+   when `--time-machine` is passed and TM is configured. Slower;
+   complements the APFS snapshot.
+3. **File-level capture** under `~/.sarge/runs/<run-id>/backup/`:
+   - `/etc/pam.d/`, `/etc/ssh/sshd_config`, `/etc/sudoers.d/`,
+     `/etc/security/audit_*` copied with `cp -Rp`
+   - `socketfilterfw --getglobalstate` + per-app rules → `socketfilterfw.txt`
+   - `pfctl -sa` → `pf-state.txt`
+   - `launchctl list` → `launchctl.txt`
+   - `defaults read` of touched domains (`com.apple.loginwindow`,
+     `com.apple.screensaver`, `com.apple.security`,
+     `/Library/Preferences/com.apple.alf`) → `defaults-<domain>.txt`
+   - `csrutil status`, `spctl --status`, `fdesetup status` →
+     `security-status.txt`
+4. **Generated `rollback.sh`** that reverses each granular artifact
+   (cp `/etc/` back, `pfctl -f` the saved state, re-enable
+   socketfilterfw, replay launchctl delta, defaults manual-review
+   pointer) and documents the APFS snapshot ID as the backstop.
+5. **`summary.md`** with capture inventory + both rollback paths.
+
+### Usage
+
+```bash
+# Interactive (prompts before snapshot)
+bash scripts/backup-macos.sh --run-id "$SARGE_RUN_ID"
+
+# Unattended (CI / chained from assess.sh)
+bash scripts/backup-macos.sh --unattended --run-id "$SARGE_RUN_ID"
+
+# Also trigger a Time Machine snapshot
+bash scripts/backup-macos.sh --unattended --time-machine --run-id "$SARGE_RUN_ID"
+
+# Roll back the most recent run
+bash scripts/rollback-macos.sh --latest
+
+# Roll back a specific run
+bash scripts/rollback-macos.sh --run-id 20260523-120000
+```
+
+### Heavy-lift fallback
+
+If granular rollback fails or leaves the system in an unexpected state,
+restore the APFS local snapshot:
+
+```bash
+tmutil listlocalsnapshots /
+tmutil restore <snapshot-id-from-summary.md>
+```
+
+### Phase 2 follow-ups (tracked as untested debt)
+
+- `defaults read` capture is human-readable, not directly importable
+  by `defaults import`. Phase 2 should switch to
+  `defaults export <domain> <file>.plist` so `rollback.sh` can
+  re-import non-interactively.
+- `pfctl -sa` is a mixed-section dump; a finer-grained `pfctl -sr`
+  capture would let `rollback.sh` reload rules deterministically.
+- `socketfilterfw` per-app rules have no bulk-import; rollback emits
+  the captured `--listapps` output for manual replay.
+
+---
+
 ## Repository Structure
 
 ```
