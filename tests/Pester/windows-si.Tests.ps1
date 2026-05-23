@@ -35,3 +35,29 @@ Describe 'Get-SargeSiWdacPolicyPresence' {
         $r.count | Should -Be 0
     }
 }
+
+Describe 'Get-SargeSiUpdateReporting' {
+    It 'returns nulls when neither WSUS nor Defender preference are set' {
+        Mock Test-Path { $false }
+        Mock Get-MpPreference { [pscustomobject]@{} }
+        $r = Get-SargeSiUpdateReporting
+        $r.wsus_status_server     | Should -Be $null
+        $r.submit_samples_consent | Should -Be $null
+    }
+}
+
+Describe 'Get-SargeSiMailRole' {
+    It 'reports no mail role when no relevant services present' {
+        Mock Get-CimInstance { $null }
+        $r = Get-SargeSiMailRole
+        $r.mail_role_detected            | Should -Be $false
+        $r.mail_role_services_present.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-SargeSiMemoryProtection' {
+    It 'throws when Get-ProcessMitigation is unavailable' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Get-ProcessMitigation' }
+        { Get-SargeSiMemoryProtection } | Should -Throw
+    }
+}
