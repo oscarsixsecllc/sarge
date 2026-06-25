@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # harden-fail2ban.sh — fail2ban Hardening — NIST 800-53 SI-3, AC-17
+# Platform: Ubuntu only (exits 0 silently on other OSes)
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/platform.sh
+source "${SCRIPT_DIR}/../lib/platform.sh"
+sarge_require_os ubuntu
 
 GW_PORT="${OPENCLAW_GATEWAY_PORT:-18790}"
 echo "[Sarge] fail2ban Hardening — SI-3/AC-17. Gateway port: $GW_PORT"

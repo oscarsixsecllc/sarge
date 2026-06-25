@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # harden-auditd.sh — Audit Daemon Hardening — NIST 800-53 AU-2, AU-9, AU-12
+# Platform: Ubuntu only (exits 0 silently on other OSes)
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/platform.sh
+source "${SCRIPT_DIR}/../lib/platform.sh"
+sarge_require_os ubuntu
 
 OC_SECRETS="${HOME}/.openclaw/secrets"
 echo "[Sarge] auditd Hardening — AU-2/AU-9/AU-12"
