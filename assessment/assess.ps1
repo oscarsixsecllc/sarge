@@ -24,6 +24,7 @@ $ShowVersion    = $false
 $ChecksOnly     = $false
 $ReportOnly     = $false
 $InspectPolicy  = $false
+$HostOnly       = $false
 foreach ($arg in @($RemainingArgs)) {
     if ([string]::IsNullOrWhiteSpace($arg)) { continue }
     switch ($arg) {
@@ -34,6 +35,7 @@ foreach ($arg in @($RemainingArgs)) {
         '--checks-only'      { $ChecksOnly = $true }
         '--report-only'      { $ReportOnly = $true }
         '--inspect-policy'   { $InspectPolicy = $true }
+        '--host-only'        { $HostOnly = $true }
         default              { Write-Warning "Unknown argument ignored: $arg" }
     }
 }
@@ -57,6 +59,9 @@ OPTIONS
                       verdicts onto Phase 1a control findings where managed
                       policy provides the enforcement. Standard user, no
                       elevation. See issue #31.
+    --host-only       Skip agent-runtime-specific findings (OpenClaw
+                      workspace checks). Use for pure baseline scanning on
+                      hosts that don't run AI agents. See issue #50.
 
 SCOPE
     Detection + breadth-first checks across all six 800-53 families on
@@ -94,12 +99,16 @@ foreach ($p in 'windows-ac','windows-au','windows-cm','windows-ia','windows-sc',
     . $path
 }
 
+$script:SargeHostOnly = [bool]$HostOnly
+$script:SargeMode = if ($HostOnly) { 'host-only' } else { 'agent-host' }
+
 $phaseTag = if ($InspectPolicy) { 'Phase 1a + 1b (policy overlay)' } else { 'Phase 1a' }
 Write-Output "[SARGE] ======================================"
 Write-Output ("[SARGE]  Sarge - Windows assessment ({0})" -f $phaseTag)
 Write-Output "[SARGE]  Oscar Six Security LLC"
 Write-Output "[SARGE]  $(Get-Date)"
 Write-Output "[SARGE]  Host: $env:COMPUTERNAME"
+Write-Output ("[SARGE]  Mode: {0}" -f $script:SargeMode)
 Write-Output "[SARGE] ======================================"
 Write-Output ""
 

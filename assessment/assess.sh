@@ -5,6 +5,14 @@
 
 set -uo pipefail
 
+SARGE_HOST_ONLY="${SARGE_HOST_ONLY:-0}"
+for arg in "$@"; do
+  case "$arg" in
+    --host-only) SARGE_HOST_ONLY=1 ;;
+  esac
+done
+export SARGE_HOST_ONLY
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -86,12 +94,17 @@ skipx() { local id="$1"; shift; echo "  [SKIP] $*"; SKIP=$((SKIP+1)); RESULTS+=(
 export -f pass warn fail skip passx warnx failx skipx
 export PASS WARN FAIL SKIP
 
+SARGE_MODE="agent-host"
+[[ "$SARGE_HOST_ONLY" == "1" ]] && SARGE_MODE="host-only"
+export SARGE_MODE
+
 log "======================================"
 log " Sarge NIST 800-53 Gap Analysis"
 log " Oscar Six Security LLC"
 log " $(date)"
 log " Host: $(hostname)"
 log " OS: ${SARGE_OS_DESCRIPTION}"
+log " Mode: ${SARGE_MODE}"
 log "======================================"
 echo ""
 
@@ -119,6 +132,7 @@ log "======================================"
   --state-dir "$STATE_DIR" \
   --run-root "$SARGE_RUN_ROOT" \
   --run-id "$SARGE_RUN_ID" \
+  --mode "$SARGE_MODE" \
   --catalog "$SCRIPT_DIR/findings-catalog.json" \
   --results "$(printf '%s\n' "${RESULTS[@]}")" || true
 

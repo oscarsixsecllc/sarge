@@ -14,6 +14,7 @@ STATE_DIR=""
 RUN_ROOT=""
 RUN_ID=""
 CATALOG=""
+SARGE_MODE="agent-host"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     --run-root) RUN_ROOT="$2"; shift 2 ;;
     --run-id) RUN_ID="$2"; shift 2 ;;
     --catalog) CATALOG="$2"; shift 2 ;;
+    --mode) SARGE_MODE="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -252,6 +254,10 @@ INSTALL_DATE_HUMAN="$INSTALLED_AT"
   echo "> Drifts caught on this host since first install (${INSTALL_DATE_HUMAN}): **${DRIFT_COUNT}**"
   echo ""
   echo "**OS:** ${OS}"
+  if [[ "$SARGE_MODE" == "host-only" ]]; then
+    echo ""
+    echo "**Mode:** host-only (agent-runtime checks excluded)"
+  fi
   echo ""
   echo "## Summary"
   echo ""
@@ -326,6 +332,7 @@ if command -v jq &>/dev/null; then
     --arg date "$TIMESTAMP" \
     --arg host "$HOST" \
     --arg os "$OS" \
+    --arg mode "$SARGE_MODE" \
     --arg installed "$INSTALLED_AT" \
     --argjson drift "$DRIFT_COUNT" \
     --argjson total "$TOTAL" \
@@ -345,6 +352,7 @@ if command -v jq &>/dev/null; then
       assessment_date: $date,
       host: $host,
       os: $os,
+      mode: $mode,
       installedAt: $installed,
       driftCount: $drift,
       summary: {
@@ -371,6 +379,7 @@ else
     echo "  \"assessment_date\": \"${TIMESTAMP}\","
     echo "  \"host\": \"${HOST}\","
     echo "  \"os\": \"${OS}\","
+    echo "  \"mode\": \"${SARGE_MODE}\","
     echo "  \"installedAt\": \"${INSTALLED_AT}\","
     echo "  \"driftCount\": ${DRIFT_COUNT},"
     echo "  \"summary\": {"

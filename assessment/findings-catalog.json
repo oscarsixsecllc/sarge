@@ -7,7 +7,8 @@
       "what": "Short description of the observed condition. Templates may include shell-style placeholders like {value} that report.sh leaves as-is — the finding 'description' from the check script is what actually appears in reports; this 'what' is reference-only.",
       "expected": "What the value/state should be.",
       "why": "2-3 sentences explaining the security risk. References the NIST 800-53 Rev 5 control by name.",
-      "fix": "Runnable command or one-line action."
+      "fix": "Runnable command or one-line action.",
+      "scope": "\"host\" (default) or \"agent\" — agent-scoped findings probe the OpenClaw / agent-runtime overlay and are excluded in --host-only mode."
     },
     "coverage": "Every fail \"...\" and warn \"...\" callsite in assessment/checks/check-*.sh. PASS/SKIP do not need entries."
   },
@@ -30,21 +31,24 @@
     "what": "~/.openclaw directory permissions are not 700",
     "expected": "700 (owner-only)",
     "why": "The ~/.openclaw directory holds workspace state, agent memory, and credential paths used by OpenClaw subprocesses. NIST 800-53 AC-3 requires enforcement of approved access — group/world-readable workspace directories let other local users enumerate which agents and accounts the operator runs. Even read access leaks operational intent.",
-    "fix": "chmod 700 ~/.openclaw"
+    "fix": "chmod 700 ~/.openclaw",
+    "scope": "agent"
   },
   "AC-3-secrets-dir-perm": {
     "family": "AC-3 — Access Enforcement",
     "what": "~/.openclaw/secrets directory permissions are not 700",
     "expected": "700 (owner-only)",
     "why": "Group/world-readable secrets directory exposes OAuth tokens and API keys cached by OpenClaw to other local users or processes. NIST 800-53 AC-3 requires access enforcement that limits sensitive resources to authorized identities. Any unprivileged local process — including a compromised browser or editor — can read tokens and impersonate the operator against external services.",
-    "fix": "chmod 700 ~/.openclaw/secrets"
+    "fix": "chmod 700 ~/.openclaw/secrets",
+    "scope": "agent"
   },
   "AC-3-secret-file-perm": {
     "family": "AC-3 — Access Enforcement",
     "what": "Individual secret file under ~/.openclaw/secrets is not 600",
     "expected": "600 (owner read/write only)",
     "why": "Even if the parent directory is locked down, lax file modes on individual tokens allow exfiltration via backup, sync, or container bind-mount. NIST 800-53 AC-3 requires per-resource access enforcement, not just directory-level. A 644 token survives a tarball or rsync that preserves modes but loses parent-dir context.",
-    "fix": "chmod 600 ~/.openclaw/secrets/<file>"
+    "fix": "chmod 600 ~/.openclaw/secrets/<file>",
+    "scope": "agent"
   },
   "AC-6-passwordless-sudo": {
     "family": "AC-6 — Least Privilege",
@@ -128,7 +132,8 @@
     "what": "No audit rules cover ~/.openclaw/secrets",
     "expected": "auditctl -l shows watch rules for the secrets directory",
     "why": "Without watch rules, reads/writes to high-value secret material are not recorded. NIST 800-53 AU-12 requires that audit records be generated for defined auditable events — for sarge's threat model, OpenClaw secret access is one of those events. Detecting credential exfiltration after the fact requires this trail.",
-    "fix": "Run: scripts/harden-auditd.sh  # or add: sudo auditctl -w ~/.openclaw/secrets -p rwxa -k openclaw-secrets"
+    "fix": "Run: scripts/harden-auditd.sh  # or add: sudo auditctl -w ~/.openclaw/secrets -p rwxa -k openclaw-secrets",
+    "scope": "agent"
   },
   "AU-12-no-auth-rules": {
     "family": "AU-12 — Audit Generation",
@@ -282,28 +287,32 @@
     "what": "OpenClaw gateway is listening but cloudflared is not running",
     "expected": "cloudflared running (Cloudflare Tunnel TLS termination) or TLS configured directly on the gateway",
     "why": "Without TLS termination, gateway traffic is unencrypted on the wire, exposing tokens and agent payloads. NIST 800-53 SC-8 requires confidentiality of transmitted information. The OpenClaw deployment pattern relies on Cloudflare Tunnel for TLS; if cloudflared isn't running, either the tunnel is down or the gateway is exposed without TLS.",
-    "fix": "sudo systemctl start cloudflared  # or: cloudflared tunnel run <tunnel-name>  # if direct access intended, configure TLS on the gateway and document"
+    "fix": "sudo systemctl start cloudflared  # or: cloudflared tunnel run <tunnel-name>  # if direct access intended, configure TLS on the gateway and document",
+    "scope": "agent"
   },
   "SC-28-config-perm": {
     "family": "SC-28 — Protection of Information at Rest",
     "what": "~/.openclaw/config.json permissions are not 600 or 400",
     "expected": "600 (or 400 if read-only is sufficient)",
     "why": "config.json holds connection details and possibly inline credentials for the OpenClaw runtime. NIST 800-53 SC-28 requires protection of information at rest. World/group-readable config gives any local process a roadmap of services and their auth material.",
-    "fix": "chmod 600 ~/.openclaw/config.json"
+    "fix": "chmod 600 ~/.openclaw/config.json",
+    "scope": "agent"
   },
   "SC-28-config-owner": {
     "family": "SC-28 — Protection of Information at Rest",
     "what": "~/.openclaw/config.json is owned by an unexpected user",
     "expected": "Owned by the current operator/service user",
     "why": "Wrong ownership often means the file was created by a different account (root via sudo, an installer, or a previous user) and may have unexpected permission semantics. NIST 800-53 SC-28 + AC-3 require explicit ownership of sensitive resources. Sort out who is supposed to own the config and align permissions.",
-    "fix": "sudo chown $(whoami):$(whoami) ~/.openclaw/config.json"
+    "fix": "sudo chown $(whoami):$(whoami) ~/.openclaw/config.json",
+    "scope": "agent"
   },
   "SC-28-world-readable-secrets": {
     "family": "SC-28 — Protection of Information at Rest",
     "what": "World-readable files found inside ~/.openclaw",
     "expected": "No files in ~/.openclaw are world-readable (mode bit o+r unset)",
     "why": "World-readable files in the OpenClaw workspace expose agent state, memory snippets, and potentially cached credentials to any local user. NIST 800-53 SC-28 requires confidentiality at rest. Even non-secret workspace files can leak operational intelligence (agent names, schedules, target hostnames).",
-    "fix": "chmod -R o-r ~/.openclaw  # then re-verify with: find ~/.openclaw -type f -perm /004"
+    "fix": "chmod -R o-r ~/.openclaw  # then re-verify with: find ~/.openclaw -type f -perm /004",
+    "scope": "agent"
   },
   "SI-2-security-updates-low": {
     "family": "SI-2 — Flaw Remediation",

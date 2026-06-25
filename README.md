@@ -62,6 +62,22 @@ sudo ./scripts/install.sh
 
 Full docs: [docs/quickstart.md](docs/quickstart.md)
 
+### Scan Modes
+
+By default, Sarge runs in **agent-host** mode — it emits both the generic NIST 800-53 host findings AND the OpenClaw agent-runtime-specific findings (workspace ACL, secrets-dir perms, gateway TLS, etc.).
+
+For hosts that don't run AI agents, or when you want a clean compliance baseline without agent-runtime context, pass `--host-only`:
+
+```bash
+# Host-only mode — pure baseline scan, no agent-overlay findings
+./assessment/assess.sh --host-only
+
+# Windows
+pwsh assessment/assess.ps1 --host-only
+```
+
+In host-only mode, agent-scoped findings are excluded entirely (not even SKIP — they're out of scope). The report header states which mode the run used. See [#50](https://github.com/oscarsixsecllc/sarge/issues/50) for details.
+
 ---
 
 ## Control Coverage (v0.1.1)

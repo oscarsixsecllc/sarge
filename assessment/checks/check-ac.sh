@@ -20,38 +20,40 @@ else
 fi
 
 # AC-3: Access Enforcement — filesystem permissions on OpenClaw workspace
-log "AC-3: Access Enforcement"
-OC_DIR="$HOME/.openclaw"
-if [[ -d "$OC_DIR" ]]; then
-  OC_PERM=$(platform file_perm "$OC_DIR")
-  if [[ "$OC_PERM" == "700" ]]; then
-    passx "AC-3-openclaw-dir-perm" "AC-3: ~/.openclaw permissions are 700"
-  else
-    failx "AC-3-openclaw-dir-perm" "AC-3: ~/.openclaw permissions are $OC_PERM — should be 700"
-  fi
-
-  SECRETS_DIR="$OC_DIR/secrets"
-  if [[ -d "$SECRETS_DIR" ]]; then
-    S_PERM=$(platform file_perm "$SECRETS_DIR")
-    if [[ "$S_PERM" == "700" ]]; then
-      passx "AC-3-secrets-dir-perm" "AC-3: ~/.openclaw/secrets permissions are 700"
+if [[ "${SARGE_HOST_ONLY:-0}" != "1" ]]; then
+  log "AC-3: Access Enforcement"
+  OC_DIR="$HOME/.openclaw"
+  if [[ -d "$OC_DIR" ]]; then
+    OC_PERM=$(platform file_perm "$OC_DIR")
+    if [[ "$OC_PERM" == "700" ]]; then
+      passx "AC-3-openclaw-dir-perm" "AC-3: ~/.openclaw permissions are 700"
     else
-      failx "AC-3-secrets-dir-perm" "AC-3: ~/.openclaw/secrets permissions are $S_PERM — should be 700"
+      failx "AC-3-openclaw-dir-perm" "AC-3: ~/.openclaw permissions are $OC_PERM — should be 700"
     fi
 
-    while IFS= read -r -d '' f; do
-      F_PERM=$(platform file_perm "$f")
-      if [[ "$F_PERM" == "600" ]]; then
-        passx "AC-3-secret-file-perm" "AC-3: Secret file $f is 600"
+    SECRETS_DIR="$OC_DIR/secrets"
+    if [[ -d "$SECRETS_DIR" ]]; then
+      S_PERM=$(platform file_perm "$SECRETS_DIR")
+      if [[ "$S_PERM" == "700" ]]; then
+        passx "AC-3-secrets-dir-perm" "AC-3: ~/.openclaw/secrets permissions are 700"
       else
-        failx "AC-3-secret-file-perm" "AC-3: Secret file $f is $F_PERM — should be 600"
+        failx "AC-3-secrets-dir-perm" "AC-3: ~/.openclaw/secrets permissions are $S_PERM — should be 700"
       fi
-    done < <(find "$SECRETS_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+
+      while IFS= read -r -d '' f; do
+        F_PERM=$(platform file_perm "$f")
+        if [[ "$F_PERM" == "600" ]]; then
+          passx "AC-3-secret-file-perm" "AC-3: Secret file $f is 600"
+        else
+          failx "AC-3-secret-file-perm" "AC-3: Secret file $f is $F_PERM — should be 600"
+        fi
+      done < <(find "$SECRETS_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+    else
+      skipx "AC-3-secrets-dir-perm" "AC-3: No secrets directory found at $SECRETS_DIR"
+    fi
   else
-    skipx "AC-3-secrets-dir-perm" "AC-3: No secrets directory found at $SECRETS_DIR"
+    skipx "AC-3-openclaw-dir-perm" "AC-3: No ~/.openclaw directory found"
   fi
-else
-  skipx "AC-3-openclaw-dir-perm" "AC-3: No ~/.openclaw directory found"
 fi
 
 # AC-6: Least Privilege — sudo configuration
