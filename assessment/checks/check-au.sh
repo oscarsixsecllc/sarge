@@ -12,17 +12,21 @@ else
   failx "AU-2-auditd-not-running" "AU-2: audit daemon is not running — install and enable: sudo apt install auditd"
 fi
 
-# AU-12: Audit rules covering OpenClaw secrets
+# AU-12: Audit rules
 log "AU-12: Audit rules"
 if ! platform_supports auditctl_available; then
-  skipx "AU-12-no-openclaw-rules" "AU-12: per-file audit rules are a Linux auditd construct; not applicable on ${SARGE_OS_DESCRIPTION}"
+  if [[ "${SARGE_HOST_ONLY:-0}" != "1" ]]; then
+    skipx "AU-12-no-openclaw-rules" "AU-12: per-file audit rules are a Linux auditd construct; not applicable on ${SARGE_OS_DESCRIPTION}"
+  fi
 elif platform auditctl_available; then
   AUDIT_RULES=$(platform audit_rules)
-  OC_SECRETS="$HOME/.openclaw/secrets"
-  if echo "$AUDIT_RULES" | grep -q "openclaw\|$OC_SECRETS"; then
-    passx "AU-12-no-openclaw-rules" "AU-12: Audit rules cover OpenClaw secrets directory"
-  else
-    failx "AU-12-no-openclaw-rules" "AU-12: No audit rules found for OpenClaw secrets — run harden-auditd.sh"
+  if [[ "${SARGE_HOST_ONLY:-0}" != "1" ]]; then
+    OC_SECRETS="$HOME/.openclaw/secrets"
+    if echo "$AUDIT_RULES" | grep -q "openclaw\|$OC_SECRETS"; then
+      passx "AU-12-no-openclaw-rules" "AU-12: Audit rules cover OpenClaw secrets directory"
+    else
+      failx "AU-12-no-openclaw-rules" "AU-12: No audit rules found for OpenClaw secrets — run harden-auditd.sh"
+    fi
   fi
   if echo "$AUDIT_RULES" | grep -q "passwd\|shadow\|sudoers"; then
     passx "AU-12-no-auth-rules" "AU-12: Audit rules cover auth-critical files"
@@ -30,7 +34,9 @@ elif platform auditctl_available; then
     warnx "AU-12-no-auth-rules" "AU-12: No audit rules for /etc/passwd, /etc/shadow, or /etc/sudoers"
   fi
 else
-  skipx "AU-12-no-openclaw-rules" "AU-12: audit rule inspection tool not available"
+  if [[ "${SARGE_HOST_ONLY:-0}" != "1" ]]; then
+    skipx "AU-12-no-openclaw-rules" "AU-12: audit rule inspection tool not available"
+  fi
 fi
 
 # AU-3 / AU-9: Audit log protection
