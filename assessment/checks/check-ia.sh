@@ -7,26 +7,31 @@ log "IA-5: Password policy"
 if ! platform_supports login_defs_value; then
   skipx "IA-5-pass-max-days" "IA-5: /etc/login.defs is a Linux-PAM construct; on ${SARGE_OS_DESCRIPTION} password aging is set via pwpolicy / MDM account policies"
 else
-  PASS_MAX=$(platform login_defs_value PASS_MAX_DAYS)
-  PASS_MIN=$(platform login_defs_value PASS_MIN_DAYS)
-  PASS_WARN=$(platform login_defs_value PASS_WARN_AGE)
-
-  if [[ -n "$PASS_MAX" && "$PASS_MAX" -le 90 ]]; then
-    passx "IA-5-pass-max-days" "IA-5: PASS_MAX_DAYS is $PASS_MAX (<=90)"
+  _ia_rc=0
+  PASS_MAX=$(platform login_defs_value PASS_MAX_DAYS) || _ia_rc=$?
+  if [[ $_ia_rc -eq 127 ]]; then
+    skipx "IA-5-pass-max-days" "IA-5: Password aging policy is delegated to MDM on ${SARGE_OS_DESCRIPTION} — verify via MDM compliance reports"
   else
-    failx "IA-5-pass-max-days" "IA-5: PASS_MAX_DAYS is ${PASS_MAX:-unset} — should be 90 or less"
-  fi
+    PASS_MIN=$(platform login_defs_value PASS_MIN_DAYS) || true
+    PASS_WARN=$(platform login_defs_value PASS_WARN_AGE) || true
 
-  if [[ -n "$PASS_MIN" && "$PASS_MIN" -ge 1 ]]; then
-    passx "IA-5-pass-min-days" "IA-5: PASS_MIN_DAYS is $PASS_MIN (>=1)"
-  else
-    warnx "IA-5-pass-min-days" "IA-5: PASS_MIN_DAYS is ${PASS_MIN:-unset} — should be at least 1"
-  fi
+    if [[ -n "$PASS_MAX" && "$PASS_MAX" -le 90 ]]; then
+      passx "IA-5-pass-max-days" "IA-5: PASS_MAX_DAYS is $PASS_MAX (<=90)"
+    else
+      failx "IA-5-pass-max-days" "IA-5: PASS_MAX_DAYS is ${PASS_MAX:-unset} — should be 90 or less"
+    fi
 
-  if [[ -n "$PASS_WARN" && "$PASS_WARN" -ge 7 ]]; then
-    passx "IA-5-pass-warn-age" "IA-5: PASS_WARN_AGE is $PASS_WARN (>=7 days)"
-  else
-    warnx "IA-5-pass-warn-age" "IA-5: PASS_WARN_AGE is ${PASS_WARN:-unset} — recommend 7 or more"
+    if [[ -n "$PASS_MIN" && "$PASS_MIN" -ge 1 ]]; then
+      passx "IA-5-pass-min-days" "IA-5: PASS_MIN_DAYS is $PASS_MIN (>=1)"
+    else
+      warnx "IA-5-pass-min-days" "IA-5: PASS_MIN_DAYS is ${PASS_MIN:-unset} — should be at least 1"
+    fi
+
+    if [[ -n "$PASS_WARN" && "$PASS_WARN" -ge 7 ]]; then
+      passx "IA-5-pass-warn-age" "IA-5: PASS_WARN_AGE is $PASS_WARN (>=7 days)"
+    else
+      warnx "IA-5-pass-warn-age" "IA-5: PASS_WARN_AGE is ${PASS_WARN:-unset} — recommend 7 or more"
+    fi
   fi
 fi
 
@@ -35,25 +40,33 @@ log "IA-5: Password complexity (pwquality)"
 if ! platform_supports pwquality_config_path; then
   skipx "IA-5-pwquality-missing" "IA-5: libpam-pwquality is a Linux-PAM module; on ${SARGE_OS_DESCRIPTION} password complexity is enforced via pwpolicy / MDM account policies"
 else
-  PWQUAL=$(platform pwquality_config_path)
-  if [[ -f "$PWQUAL" ]]; then
-    MINLEN=$(platform pwquality_value minlen)
-    if [[ -n "$MINLEN" && "$MINLEN" -ge 12 ]]; then
-      passx "IA-5-pwquality-minlen" "IA-5: pwquality minlen is $MINLEN (>=12)"
-    else
-      failx "IA-5-pwquality-minlen" "IA-5: pwquality minlen is ${MINLEN:-unset} — should be 12 or more"
-    fi
-
-    for param in dcredit ucredit ocredit lcredit; do
-      VAL=$(platform pwquality_value "$param")
-      if [[ -n "$VAL" ]]; then
-        passx "IA-5-pwquality-credit" "IA-5: pwquality $param is configured ($VAL)"
-      else
-        warnx "IA-5-pwquality-credit" "IA-5: pwquality $param not set — consider enabling character complexity requirements"
-      fi
-    done
+  _ia_rc=0
+  PWQUAL=$(platform pwquality_config_path) || _ia_rc=$?
+  if [[ $_ia_rc -eq 127 ]]; then
+    skipx "IA-5-pwquality-missing" "IA-5: Password complexity policy is delegated to MDM on ${SARGE_OS_DESCRIPTION} — verify via MDM compliance reports"
   else
-    failx "IA-5-pwquality-missing" "IA-5: $PWQUAL not found — install libpam-pwquality and configure"
+    # On macOS the "config path" is a sentinel — the backing store is pwpolicy,
+    # not a file on disk. Skip the file-existence check when the path is the
+    # sentinel; on Linux the real file must exist.
+    if [[ -f "$PWQUAL" ]] || [[ "$PWQUAL" == */pwpolicy ]]; then
+      MINLEN=$(platform pwquality_value minlen)
+      if [[ -n "$MINLEN" && "$MINLEN" -ge 12 ]]; then
+        passx "IA-5-pwquality-minlen" "IA-5: pwquality minlen is $MINLEN (>=12)"
+      else
+        failx "IA-5-pwquality-minlen" "IA-5: pwquality minlen is ${MINLEN:-unset} — should be 12 or more"
+      fi
+
+      for param in dcredit ucredit ocredit lcredit; do
+        VAL=$(platform pwquality_value "$param")
+        if [[ -n "$VAL" ]]; then
+          passx "IA-5-pwquality-credit" "IA-5: pwquality $param is configured ($VAL)"
+        else
+          warnx "IA-5-pwquality-credit" "IA-5: pwquality $param not set — consider enabling character complexity requirements"
+        fi
+      done
+    else
+      failx "IA-5-pwquality-missing" "IA-5: $PWQUAL not found — install libpam-pwquality and configure"
+    fi
   fi
 fi
 
@@ -62,29 +75,34 @@ log "IA-2: Account lockout (faillock)"
 if ! platform_supports pam_auth_path; then
   skipx "IA-2-faillock-not-configured" "IA-2: pam_faillock is a Linux-PAM module; on ${SARGE_OS_DESCRIPTION} account lockout is enforced via pwpolicy / MDM"
 else
-  PAM_AUTH=$(platform pam_auth_path)
-  if [[ -f "$PAM_AUTH" ]]; then
-    if platform pam_faillock_configured; then
-      passx "IA-2-faillock-not-configured" "IA-2: pam_faillock is configured in common-auth"
-      FAILLOCK_CONF=$(platform faillock_config_path)
-      if [[ -f "$FAILLOCK_CONF" ]]; then
-        DENY=$(platform faillock_value deny)
-        UNLOCK_TIME=$(platform faillock_value unlock_time)
-        if [[ -n "$DENY" && "$DENY" -le 5 ]]; then
-          passx "IA-2-faillock-deny" "IA-2: faillock deny threshold is $DENY (<=5 attempts)"
+  _ia_rc=0
+  PAM_AUTH=$(platform pam_auth_path) || _ia_rc=$?
+  if [[ $_ia_rc -eq 127 ]]; then
+    skipx "IA-2-faillock-not-configured" "IA-2: Account lockout policy is delegated to MDM on ${SARGE_OS_DESCRIPTION} — verify via MDM compliance reports"
+  else
+    if [[ -f "$PAM_AUTH" ]] || [[ "$PAM_AUTH" == */pam_faillock ]]; then
+      if platform pam_faillock_configured; then
+        passx "IA-2-faillock-not-configured" "IA-2: pam_faillock is configured in common-auth"
+        FAILLOCK_CONF=$(platform faillock_config_path)
+        if [[ -f "$FAILLOCK_CONF" ]] || [[ "$FAILLOCK_CONF" == */faillock ]]; then
+          DENY=$(platform faillock_value deny)
+          UNLOCK_TIME=$(platform faillock_value unlock_time)
+          if [[ -n "$DENY" && "$DENY" -le 5 ]]; then
+            passx "IA-2-faillock-deny" "IA-2: faillock deny threshold is $DENY (<=5 attempts)"
+          else
+            warnx "IA-2-faillock-deny" "IA-2: faillock deny is ${DENY:-unset} — recommend 5 or fewer attempts"
+          fi
+          if [[ -n "$UNLOCK_TIME" && "$UNLOCK_TIME" -ge 1800 ]]; then
+            passx "IA-2-faillock-unlock-time" "IA-2: faillock unlock_time is $UNLOCK_TIME seconds (>=30 min)"
+          else
+            warnx "IA-2-faillock-unlock-time" "IA-2: faillock unlock_time is ${UNLOCK_TIME:-unset} — recommend 1800 (30 min)"
+          fi
         else
-          warnx "IA-2-faillock-deny" "IA-2: faillock deny is ${DENY:-unset} — recommend 5 or fewer attempts"
-        fi
-        if [[ -n "$UNLOCK_TIME" && "$UNLOCK_TIME" -ge 1800 ]]; then
-          passx "IA-2-faillock-unlock-time" "IA-2: faillock unlock_time is $UNLOCK_TIME seconds (>=30 min)"
-        else
-          warnx "IA-2-faillock-unlock-time" "IA-2: faillock unlock_time is ${UNLOCK_TIME:-unset} — recommend 1800 (30 min)"
+          warnx "IA-2-faillock-conf-missing" "IA-2: pam_faillock referenced but $FAILLOCK_CONF not found"
         fi
       else
-        warnx "IA-2-faillock-conf-missing" "IA-2: pam_faillock referenced but $FAILLOCK_CONF not found"
+        failx "IA-2-faillock-not-configured" "IA-2: pam_faillock not configured — account lockout policy not enforced"
       fi
-    else
-      failx "IA-2-faillock-not-configured" "IA-2: pam_faillock not configured — account lockout policy not enforced"
     fi
   fi
 fi

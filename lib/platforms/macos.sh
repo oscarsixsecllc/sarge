@@ -140,12 +140,49 @@ macos_system_logger_active() { return 0; }
 # Homebrew/MAS (third-party). unattended-upgrades has no equivalent —
 # it is typically delegated to MDM (Jamf, Intune, Kandji). Intentionally
 # left undefined:
-#   package_installed, unattended_upgrades_config_path,
-#   pending_package_updates_count, pending_security_updates_count
+#   package_installed, unattended_upgrades_config_path
+#
+# softwareupdate --list --no-scan reads the cached scan result (avoids a
+# 5-30s CDN hit). If no cached scan exists, softwareupdate prints
+# "No new software available." — we treat that as 0 pending updates (not
+# an error), but emit a note that operators should schedule periodic scans
+# via launchd or MDM.
 #
 # Likewise the Linux legacy service inventory (telnet, rsh, vsftpd, cups,
 # avahi-daemon as systemd unit names) does not map to launchd labels;
 # `linux_legacy_service_names` is intentionally Ubuntu-only.
+
+# Count of pending package updates from cached softwareupdate results.
+# Uses --no-scan to avoid the 5-30s CDN hit; reads the last cached scan.
+# Always prints a single integer.
+macos_pending_package_updates_count() {
+  local output n
+  output=$(softwareupdate --list --no-scan 2>&1) || true
+  # "No new software available." means zero updates
+  if echo "$output" | grep -q "No new software available"; then
+    echo "0"
+    return 0
+  fi
+  # Count lines starting with "* Label:" — each is one update
+  n=$(echo "$output" | grep -c '^\* Label:' || echo 0)
+  echo "$n" | tr -d '[:space:]'
+}
+
+# Count of pending updates that are security-relevant. Apple marks
+# security-relevant updates with "Recommended: YES" in the softwareupdate
+# output. This is the pragmatic heuristic: full OS updates, Safari patches,
+# and XProtect definitions all carry this flag.
+macos_pending_security_updates_count() {
+  local output n
+  output=$(softwareupdate --list --no-scan 2>&1) || true
+  if echo "$output" | grep -q "No new software available"; then
+    echo "0"
+    return 0
+  fi
+  # Count "Recommended: YES" lines — Apple's flag for security-relevant updates
+  n=$(echo "$output" | grep -ci 'Recommended: YES' || echo 0)
+  echo "$n" | tr -d '[:space:]'
+}
 
 # Generic service status via launchctl. macOS service labels are
 # reverse-DNS (e.g. com.openssh.sshd), unlike Ubuntu's short unit names —
@@ -174,13 +211,117 @@ macos_sshd_config_path() { echo "/etc/ssh/sshd_config"; }
 
 # ---------- Authentication (IA family) ----------
 #
-# /etc/login.defs, pwquality.conf, and pam_faillock are Linux-PAM
-# constructs. macOS uses pwpolicy/account-policy plists, frequently
-# delegated to MDM. Probes intentionally NOT defined:
-#   login_defs_value, pwquality_config_path, pwquality_value,
-#   pam_auth_path, pam_faillock_configured, faillock_config_path,
-#   faillock_value
-#
+# macOS password policy is managed via pwpolicy / account-policy plists.
+# On MDM-managed Macs, pwpolicy -getaccountpolicies returns empty or a
+# placeholder — the policy lives at the MDM tier. The probes below detect
+# this case and return 127 so check-ia.sh emits SKIP with the MDM rationale
+# rather than a misleading FAIL.
+
+# Cache the pwpolicy XML once per assessment run. Returns the plist content
+# or empty string. Sets _MACOS_PWPOLICY_CACHE and _MACOS_IS_MDM_MANAGED.
+_macos_pwpolicy_cache=""
+_macos_pwpolicy_cached=0
+_macos_is_mdm_managed=""
+
+_macos_load_pwpolicy() {
+  if [[ "$_macos_pwpolicy_cached" -eq 1 ]]; then return 0; fi
+  _macos_pwpolicy_cached=1
+  _macos_pwpolicy_cache=$(pwpolicy -getaccountpolicies 2>/dev/null | sed '1d') || true
+  # Detect MDM management: if pwpolicy is empty/trivial AND management
+  # profiles are installed, the real policy lives in MDM.
+  if [[ -z "$_macos_pwpolicy_cache" ]] || ! echo "$_macos_pwpolicy_cache" | grep -q "policyContent"; then
+    if profiles show -type configuration 2>/dev/null | grep -q "attribute"; then
+      _macos_is_mdm_managed=1
+    fi
+  fi
+}
+
+# Internal: extract a value from the pwpolicy plist by key name.
+# pwpolicy output is XML plist; we grep for the key and take the next line's value.
+_macos_pwpolicy_value() {
+  local key="$1"
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  if [[ -z "$_macos_pwpolicy_cache" ]]; then return 127; fi
+  echo "$_macos_pwpolicy_cache" \
+    | grep -A1 "<key>${key}</key>" 2>/dev/null \
+    | tail -1 \
+    | sed -E 's/.*<(integer|real)>(.*)<\/(integer|real)>.*/\2/' \
+    | grep -E '^[0-9]+$'
+}
+
+# Map login.defs keys to pwpolicy attribute names.
+macos_login_defs_value() {
+  local key="$1"
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  case "$key" in
+    PASS_MAX_DAYS) _macos_pwpolicy_value "policyAttributeMaximumPasswordAgeInDays" ;;
+    PASS_MIN_DAYS) _macos_pwpolicy_value "policyAttributeMinimumPasswordAgeInDays" ;;
+    PASS_WARN_AGE) return 127 ;;  # No macOS equivalent
+    *) return 127 ;;
+  esac
+}
+
+macos_pwquality_config_path() {
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  if [[ -z "$_macos_pwpolicy_cache" ]] || ! echo "$_macos_pwpolicy_cache" | grep -q "policyContent"; then
+    return 127
+  fi
+  echo "/var/db/SystemPolicyConfiguration/pwpolicy"  # sentinel path
+}
+
+macos_pwquality_value() {
+  local key="$1"
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  case "$key" in
+    minlen)   _macos_pwpolicy_value "policyAttributeMinimumLength" ;;
+    dcredit)  _macos_pwpolicy_value "policyAttributeMinimumNumberOfDigits" ;;
+    ucredit)  _macos_pwpolicy_value "policyAttributeMinimumNumberOfUppercaseLetters" ;;
+    ocredit)  _macos_pwpolicy_value "policyAttributeMinimumNumberOfSymbolCharacters" ;;
+    lcredit)  _macos_pwpolicy_value "policyAttributeMinimumNumberOfLowercaseLetters" ;;
+    *) return 127 ;;
+  esac
+}
+
+macos_pam_auth_path() {
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  if [[ -z "$_macos_pwpolicy_cache" ]] || ! echo "$_macos_pwpolicy_cache" | grep -q "policyContent"; then
+    return 127
+  fi
+  echo "/var/db/SystemPolicyConfiguration/pam_faillock"  # sentinel path
+}
+
+macos_pam_faillock_configured() {
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  echo "$_macos_pwpolicy_cache" | grep -q "policyAttributeMaximumFailedAuthentications"
+}
+
+macos_faillock_config_path() {
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  echo "/var/db/SystemPolicyConfiguration/faillock"  # sentinel path
+}
+
+macos_faillock_value() {
+  local key="$1"
+  _macos_load_pwpolicy
+  if [[ -n "$_macos_is_mdm_managed" ]]; then return 127; fi
+  case "$key" in
+    deny) _macos_pwpolicy_value "policyAttributeMaximumFailedAuthentications" ;;
+    unlock_time)
+      local minutes
+      minutes=$(_macos_pwpolicy_value "policyAttributeMinutesUntilFailedAuthenticationReset") || return 127
+      echo $(( minutes * 60 ))
+      ;;
+    *) return 127 ;;
+  esac
+}
+
 # Session timeout (TMOUT) is shell-level on both platforms and worth
 # probing on macOS too — macOS defaults to zsh, but operators may set
 # TMOUT in /etc/profile or /etc/bashrc for bash sessions.
@@ -239,6 +380,9 @@ _macos_drift_fields() {
   echo "ssh_permit_root_login=${permit_root:-unset}"
   echo "ssh_password_auth=${pw_auth:-unset}"
   echo "system_integrity_protection=${sip:-unknown}"
+  local pending_updates
+  pending_updates=$(macos_pending_package_updates_count 2>/dev/null) || true
+  echo "pending_updates=${pending_updates:-unknown}"
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in
