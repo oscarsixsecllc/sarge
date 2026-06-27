@@ -5,9 +5,9 @@
     "schema": {
       "family": "Long name of the NIST 800-53 Rev 5 family + control (e.g. 'AC-3 — Access Enforcement').",
       "what": "Short description of the observed condition. Templates may include shell-style placeholders like {value} that report.sh leaves as-is — the finding 'description' from the check script is what actually appears in reports; this 'what' is reference-only.",
-      "expected": "What the value/state should be.",
-      "why": "2-3 sentences explaining the security risk. References the NIST 800-53 Rev 5 control by name.",
-      "fix": "Runnable command or one-line action.",
+      "expected": "What the value/state should be. May be a string or a per-platform map (same shape as 'fix').",
+      "why": "2-3 sentences explaining the security risk. References the NIST 800-53 Rev 5 control by name. May be a string or a per-platform map (same shape as 'fix').",
+      "fix": "Runnable command or one-line action. May be a string or a per-platform map: {\"default\": \"...\", \"macos\": \"...\", \"ubuntu\": \"...\"}. report.sh resolves via $SARGE_OS with fallback to 'default'.",
       "scope": "\"host\" (default) or \"agent\" — agent-scoped findings probe the OpenClaw / agent-runtime overlay and are excluded in --host-only mode."
     },
     "coverage": "Every fail \"...\" and warn \"...\" callsite in assessment/checks/check-*.sh. PASS/SKIP do not need entries."
@@ -66,17 +66,29 @@
   },
   "AC-17-ufw-inactive": {
     "family": "AC-17 — Remote Access",
-    "what": "UFW firewall is installed but not active",
-    "expected": "UFW reports 'Status: active'",
-    "why": "Without an active host firewall, any service that binds to an external interface is reachable from the network. NIST 800-53 AC-17 requires controls on remote access paths. An inactive firewall means the host depends entirely on perimeter or upstream protection — fine in some deployments, but invisible drift if you assumed UFW was enforcing.",
-    "fix": "sudo ufw enable  # review rules first with: sudo ufw status verbose"
+    "what": "Host firewall is not active",
+    "expected": {
+      "default": "UFW reports 'Status: active'",
+      "macos": "Application Firewall reports globalstate = 1"
+    },
+    "why": "Without an active host firewall, any service that binds to an external interface is reachable from the network. NIST 800-53 AC-17 requires controls on remote access paths. An inactive firewall means the host depends entirely on perimeter or upstream protection — fine in some deployments, but invisible drift if you assumed the firewall was enforcing.",
+    "fix": {
+      "default": "sudo ufw enable  # review rules first with: sudo ufw status verbose",
+      "macos": "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on"
+    }
   },
   "AC-17-ufw-not-installed": {
     "family": "AC-17 — Remote Access",
-    "what": "UFW is not installed",
-    "expected": "UFW or another host firewall (nftables, firewalld) is in place",
-    "why": "Sarge can only attest to UFW; without it, host-level network access enforcement is unverified. NIST 800-53 AC-17 requires documented controls on remote access. If you use nftables or rely on a cloud security group, that's fine — but Sarge cannot confirm it, so this is flagged as a gap until you install UFW or document the alternative.",
-    "fix": "sudo apt install ufw && sudo ufw enable  # or document the alternative firewall in baseline/"
+    "what": "No recognized host firewall is installed",
+    "expected": {
+      "default": "UFW or another host firewall (nftables, firewalld) is in place",
+      "macos": "Application Firewall is available (built-in on macOS)"
+    },
+    "why": "Without a recognized host firewall, host-level network access enforcement is unverified. NIST 800-53 AC-17 requires documented controls on remote access. If you use an alternative firewall or rely on a cloud security group, that's fine — but Sarge cannot confirm it, so this is flagged as a gap until you enable the firewall or document the alternative.",
+    "fix": {
+      "default": "sudo apt install ufw && sudo ufw enable  # or document the alternative firewall in baseline/",
+      "macos": "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on"
+    }
   },
   "AC-17-external-ports": {
     "family": "AC-17 — Remote Access",
@@ -87,9 +99,9 @@
   },
   "AU-2-auditd-not-running": {
     "family": "AU-2 — Audit Events",
-    "what": "auditd service is not running",
-    "expected": "auditd is active and persisting events",
-    "why": "Without auditd, security-relevant kernel and file events aren't recorded, so post-incident forensics rely entirely on application logs and journald (which can be tampered with by root). NIST 800-53 AU-2 requires the system to generate audit records for defined events; auditd is the standard Linux mechanism. No auditd = no defensible timeline.",
+    "what": "Audit daemon is not running",
+    "expected": "Audit daemon is active and persisting events",
+    "why": "Without the audit daemon, security-relevant kernel and file events aren't recorded, so post-incident forensics rely entirely on application logs and the system journal (which can be tampered with by root). NIST 800-53 AU-2 requires the system to generate audit records for defined events; the audit daemon is the standard Linux mechanism. No audit daemon = no defensible timeline.",
     "fix": "sudo apt install auditd && sudo systemctl enable --now auditd"
   },
   "AU-2-journald-inactive": {
@@ -110,7 +122,7 @@
     "family": "AU-9 — Protection of Audit Information",
     "what": "/var/log/audit/audit.log is not owned by root",
     "expected": "Owner is root",
-    "why": "Audit logs owned by a non-root user can be tampered with by that user, defeating non-repudiation. NIST 800-53 AU-9 requires audit information to be protected from unauthorized modification. If the audit log owner can write to it, the audit log can be edited to hide actions.",
+    "why": "Audit logs owned by a non-root user can be tampered with by that user, defeating non-repudiation. NIST 800-53 AU-9 requires audit information to be protected from unauthorized modification. If the log owner can write to it, the audit trail can be edited to hide actions.",
     "fix": "sudo chown root:root /var/log/audit/audit.log"
   },
   "AU-9-audit-log-perm": {
@@ -122,9 +134,9 @@
   },
   "AU-9-audit-log-missing": {
     "family": "AU-9 — Protection of Audit Information",
-    "what": "auditd is running but /var/log/audit/audit.log does not exist",
-    "expected": "audit.log present at the configured location",
-    "why": "auditd is daemonized but no log file exists at the standard path — likely a misconfiguration in /etc/audit/auditd.conf, or audit events being routed elsewhere. NIST 800-53 AU-9 cannot be enforced if the audit sink is unknown. This is a silent-failure mode where operators believe they have audit coverage but don't.",
+    "what": "Audit daemon is running but /var/log/audit/audit.log does not exist",
+    "expected": "Audit log present at the configured location",
+    "why": "The audit daemon is running but no log file exists at the standard path — likely a misconfiguration in the audit daemon config, or audit events being routed elsewhere. NIST 800-53 AU-9 cannot be enforced if the audit sink is unknown. This is a silent-failure mode where operators believe they have audit coverage but don't.",
     "fix": "Check 'log_file' in /etc/audit/auditd.conf and review with: sudo aureport -t"
   },
   "AU-12-no-openclaw-rules": {
@@ -196,14 +208,20 @@
     "what": "SSH PermitRootLogin is not 'no' or 'prohibit-password'",
     "expected": "PermitRootLogin no  (or prohibit-password if key-only root is required)",
     "why": "Direct root SSH login means a single compromised credential or key is full system takeover, with no audit trail tying actions to a human operator. NIST 800-53 CM-7 (least functionality) and AC-6 (least privilege) both argue for forcing operators to log in as themselves and elevate via sudo. This also breaks brute-force attempts since 'root' is the universal target username.",
-    "fix": "Run scripts/harden-ssh-macos.sh (macOS) or: sudo sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload ssh (Linux)"
+    "fix": {
+      "default": "sudo sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload ssh",
+      "macos": "sudo sed -i '' 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo launchctl kickstart -k system/com.openssh.sshd"
+    }
   },
   "CM-7-ssh-password-auth": {
     "family": "CM-7 — Least Functionality",
     "what": "SSH PasswordAuthentication is not explicitly disabled",
     "expected": "PasswordAuthentication no  (key-based auth only)",
     "why": "Password-based SSH is vulnerable to brute force and credential stuffing in a way key-based auth is not. NIST 800-53 CM-7 plus IA-2 (identification & authentication) favor cryptographic authenticators over reusable passwords for remote access. Once you've migrated all operators to keys, this should be locked down.",
-    "fix": "Run scripts/harden-ssh-macos.sh (macOS) or: sudo sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload ssh (Linux)  # confirm key-based login works first"
+    "fix": {
+      "default": "sudo sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload ssh  # confirm key-based login works first",
+      "macos": "sudo sed -i '' 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo launchctl kickstart -k system/com.openssh.sshd  # confirm key-based login works first"
+    }
   },
   "IA-5-pass-max-days": {
     "family": "IA-5 — Authenticator Management",
