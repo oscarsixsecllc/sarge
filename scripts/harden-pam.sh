@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # harden-pam.sh — PAM Hardening — NIST 800-53 IA-2, IA-5
+# Platform: Ubuntu only (exits 0 silently on other OSes)
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/platform.sh
+source "${SCRIPT_DIR}/../lib/platform.sh"
+sarge_require_os ubuntu
 
 echo "[Sarge] PAM Hardening — IA-2 (faillock) + IA-5 (pwquality)"
 read -r -p "Apply PAM hardening? [y/N] " confirm

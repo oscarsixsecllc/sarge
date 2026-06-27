@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # harden-ufw.sh — UFW Firewall Hardening — NIST 800-53 AC-17
 # Idempotent | Non-destructive | Ubuntu 22.04/24.04 | Requires sudo
+# Platform: Ubuntu only (exits 0 silently on other OSes)
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/platform.sh
+source "${SCRIPT_DIR}/../lib/platform.sh"
+sarge_require_os ubuntu
 
 GW_PORT="${OPENCLAW_GATEWAY_PORT:-18790}"
 LAN_SUBNET="${SARGE_LAN_SUBNET:-192.168.0.0/24}"
