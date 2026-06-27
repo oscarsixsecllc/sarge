@@ -66,10 +66,11 @@ if platform sshd_active; then
   SSHD_CONFIG=$(platform sshd_config_path)
   # Build a list of config files to search: the main sshd_config plus any
   # drop-ins in sshd_config.d/ (used by harden-ssh-macos.sh on macOS and
-  # supported on modern OpenSSH everywhere). sshd evaluates drop-ins in
-  # lexical order; the LAST match wins, so if the main config says
-  # "PermitRootLogin yes" and a drop-in says "no", sshd uses "no". Our
-  # check mirrors this by treating a match in ANY file as sufficient.
+  # supported on modern OpenSSH everywhere). OpenSSH uses first-match
+  # semantics: the first value obtained for a keyword wins. macOS Ventura+
+  # places 'Include /etc/ssh/sshd_config.d/*' at the top of sshd_config,
+  # so drop-in values take precedence over later entries in the main file.
+  # Our check treats a match in ANY file as sufficient.
   _SSHD_CONF_FILES=("$SSHD_CONFIG")
   SSHD_DROPIN_DIR="${SSHD_CONFIG%/*}/sshd_config.d"
   if [[ -d "$SSHD_DROPIN_DIR" ]]; then

@@ -64,7 +64,9 @@ echo "             ChallengeResponseAuthentication no"
 echo ""
 
 # Detect if current SSH session is key-based or password-based.
-# SSH_AUTH_SOCK being set strongly suggests key-based auth (agent forwarding).
+# SSH_AUTH_SOCK being set indicates an SSH agent is available, which usually
+# (but not always) means the session authenticated via key — a user could
+# have agent forwarding active yet have logged in with a password.
 # SSH_CONNECTION being set means we're in an SSH session at all.
 if [[ -n "${SSH_CONNECTION:-}" ]]; then
   if [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
