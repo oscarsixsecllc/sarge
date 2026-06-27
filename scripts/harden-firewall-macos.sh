@@ -12,6 +12,8 @@
 # This script must be run with sudo (socketfilterfw writes require root).
 set -euo pipefail
 
+[[ $EUID -eq 0 ]] || { echo "[Sarge] ERROR: This script requires sudo." >&2; exit 1; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -54,7 +56,7 @@ alf_set() {
   if echo "$current" | grep -qE "$desired_pattern"; then
     echo "  [OK] $label — already in desired state"
   else
-    "$ALF" "$set_flag" 2>/dev/null
+    "$ALF" "$set_flag"
     echo "  [APPLIED] $label"
   fi
 }
