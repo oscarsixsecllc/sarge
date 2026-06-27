@@ -176,23 +176,39 @@ sort_by_check_id() {
 # --- Catalog lookup helpers ---
 catalog_field() {
   # $1 = check_id, $2 = field (family|what|expected|why|fix)
+  # Fields may be a plain string or a per-platform map:
+  #   { "default": "...", "macos": "...", "ubuntu": "..." }
+  # When a map is found, $SARGE_OS selects the entry; falls back to "default".
   local id="$1" field="$2"
   [[ -z "$id" ]] && return 1
   [[ ! -f "$CATALOG" ]] && return 1
   local val=""
+  local os="${SARGE_OS:-}"
   if command -v jq &>/dev/null; then
-    val=$(jq -r --arg id "$id" --arg f "$field" '.[$id][$f] // empty' "$CATALOG" 2>/dev/null)
+    val=$(jq -r --arg id "$id" --arg f "$field" --arg os "$os" '
+      .[$id][$f] as $v |
+      if $v == null then empty
+      elif ($v | type) == "object" then
+        ($v[$os] // $v["default"] // empty)
+      else $v
+      end
+    ' "$CATALOG" 2>/dev/null)
   elif command -v python3 &>/dev/null; then
     val=$(python3 -c '
 import json,sys
 try:
   d=json.load(open(sys.argv[1]))
-  v=d.get(sys.argv[2],{}).get(sys.argv[3],"")
+  v=d.get(sys.argv[2],{}).get(sys.argv[3])
+  if v is None:
+    sys.exit(0)
+  if isinstance(v, dict):
+    os=sys.argv[4]
+    v=v.get(os, v.get("default",""))
   if v is None: v=""
   print(v)
 except Exception:
   pass
-' "$CATALOG" "$id" "$field" 2>/dev/null)
+' "$CATALOG" "$id" "$field" "$os" 2>/dev/null)
   else
     return 1
   fi
