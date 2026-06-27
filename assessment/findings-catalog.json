@@ -191,14 +191,14 @@
     "what": "SSH PermitRootLogin is not 'no' or 'prohibit-password'",
     "expected": "PermitRootLogin no  (or prohibit-password if key-only root is required)",
     "why": "Direct root SSH login means a single compromised credential or key is full system takeover, with no audit trail tying actions to a human operator. NIST 800-53 CM-7 (least functionality) and AC-6 (least privilege) both argue for forcing operators to log in as themselves and elevate via sudo. This also breaks brute-force attempts since 'root' is the universal target username.",
-    "fix": "sudo sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload ssh"
+    "fix": "Run scripts/harden-ssh-macos.sh (macOS) or: sudo sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload ssh (Linux)"
   },
   "CM-7-ssh-password-auth": {
     "family": "CM-7 — Least Functionality",
     "what": "SSH PasswordAuthentication is not explicitly disabled",
     "expected": "PasswordAuthentication no  (key-based auth only)",
     "why": "Password-based SSH is vulnerable to brute force and credential stuffing in a way key-based auth is not. NIST 800-53 CM-7 plus IA-2 (identification & authentication) favor cryptographic authenticators over reusable passwords for remote access. Once you've migrated all operators to keys, this should be locked down.",
-    "fix": "sudo sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload ssh  # confirm key-based login works first"
+    "fix": "Run scripts/harden-ssh-macos.sh (macOS) or: sudo sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload ssh (Linux)  # confirm key-based login works first"
   },
   "IA-5-pass-max-days": {
     "family": "IA-5 — Authenticator Management",

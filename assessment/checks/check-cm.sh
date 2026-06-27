@@ -64,13 +64,27 @@ fi
 log "CM-7: SSH configuration"
 if platform sshd_active; then
   SSHD_CONFIG=$(platform sshd_config_path)
-  if [[ -f "$SSHD_CONFIG" ]]; then
-    if grep -qiE "^PermitRootLogin\s+(no|prohibit-password)" "$SSHD_CONFIG" 2>/dev/null; then
+  # Build a list of config files to search: the main sshd_config plus any
+  # drop-ins in sshd_config.d/ (used by harden-ssh-macos.sh on macOS and
+  # supported on modern OpenSSH everywhere). OpenSSH uses first-match
+  # semantics: the first value obtained for a keyword wins. macOS Ventura+
+  # places 'Include /etc/ssh/sshd_config.d/*' at the top of sshd_config,
+  # so drop-in values take precedence over later entries in the main file.
+  # Our check treats a match in ANY file as sufficient.
+  _SSHD_CONF_FILES=("$SSHD_CONFIG")
+  SSHD_DROPIN_DIR="${SSHD_CONFIG%/*}/sshd_config.d"
+  if [[ -d "$SSHD_DROPIN_DIR" ]]; then
+    while IFS= read -r f; do
+      _SSHD_CONF_FILES+=("$f")
+    done < <(find "$SSHD_DROPIN_DIR" -maxdepth 1 -name '*.conf' -type f 2>/dev/null | sort)
+  fi
+  if [[ ${#_SSHD_CONF_FILES[@]} -gt 0 ]]; then
+    if grep -qiE "^PermitRootLogin\s+(no|prohibit-password)" "${_SSHD_CONF_FILES[@]}" 2>/dev/null; then
       passx "CM-7-ssh-permit-root" "CM-7: SSH PermitRootLogin is disabled or limited"
     else
       failx "CM-7-ssh-permit-root" "CM-7: SSH PermitRootLogin should be 'no' or 'prohibit-password'"
     fi
-    if grep -qiE "^PasswordAuthentication\s+no" "$SSHD_CONFIG" 2>/dev/null; then
+    if grep -qiE "^PasswordAuthentication\s+no" "${_SSHD_CONF_FILES[@]}" 2>/dev/null; then
       passx "CM-7-ssh-password-auth" "CM-7: SSH PasswordAuthentication disabled (key-only)"
     else
       warnx "CM-7-ssh-password-auth" "CM-7: SSH PasswordAuthentication is not explicitly disabled — consider key-only auth"

@@ -29,10 +29,10 @@ case "$SARGE_OS" in
     MODULES=(harden-permissions harden-pam harden-auditd harden-fail2ban harden-ufw harden-systemd)
     ;;
   macos)
-    MODULES=(harden-permissions harden-firewall-macos)
+    MODULES=(harden-permissions harden-firewall-macos harden-ssh-macos)
     echo ""
     echo "[Sarge] macOS hardening is rolling out incrementally."
-    echo "[Sarge] This release applies permissions + firewall hardening."
+    echo "[Sarge] This release applies permissions, firewall, and SSH hardening."
     echo "[Sarge] Track the rollout: https://github.com/oscarsixsecllc/sarge/issues"
     echo ""
     ;;
