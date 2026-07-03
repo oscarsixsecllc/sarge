@@ -379,6 +379,41 @@ artifacts still apply cleanly.
 
 ---
 
+## Testing
+
+Sarge ships integration tests you can run in your environment. All tests are read-only unless noted.
+
+### Linux / macOS
+
+```bash
+# Drift detection pipeline (snapshot, compare, detect changes)
+bash tests/integration/drift-detection.sh
+
+# Report structure validation (runs assessment, validates JSON/MD output)
+bash tests/integration/report-validation.sh
+
+# Hardening round-trip (assess, harden UFW, reassess, verify fix)
+# Requires iptables/NET_ADMIN; skips gracefully in containers
+bash tests/integration/hardening-roundtrip.sh
+
+# Host-only mode validation
+bash tests/integration/host-only-mode.sh
+
+# Backup smoke tests
+bash tests/integration/backup-ubuntu-smoke.sh
+bash tests/integration/backup-macos-smoke.sh
+```
+
+### Windows
+
+```powershell
+Invoke-Pester -Path tests/Pester
+```
+
+If a test fails in your environment, please [open an issue](https://github.com/oscarsixsecllc/sarge/issues).
+
+---
+
 ## Repository Structure
 
 ```
