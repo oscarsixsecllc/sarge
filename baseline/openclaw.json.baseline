@@ -1,7 +1,9 @@
 {
-  "_comment": "Sarge Hardened OpenClaw Baseline — NIST 800-53 Rev 5",
-  "_version": "0.1.0",
+  "_comment": "Sarge Hardened OpenClaw Baseline — NIST 800-53 Rev 5 + Oscar Six Agent-Safety Overlay",
+  "_version": "0.2.0",
   "_publisher": "Oscar Six Security LLC",
+  "_updated": "2026-08-29",
+  "_schema_notes": "Baseline refreshed against OpenClaw 2026.7.x live schema. Sections added since v0.1: approvalPolicy (via approvals), hooks, subagents (via agents.subagents), workshop (via skills.workshop), compaction (via session.compaction), rateLimit (via models.rateLimit), auth.profiles, mcp.servers, browser, sandboxes (via agents.defaults.sandbox + sandboxes top-level), workboard (via plugins.workboard). See DECISIONS.md 2026-08-29 entry for the section-mapping decisions.",
 
   "gateway": {
     "bind": "lan",
@@ -19,7 +21,114 @@
       }
     },
     "allowlist": [],
-    "_allowlist_control": "AC-2: Only named, authorized users in allowlist"
+    "_allowlist_control": "AC-2: Only named, authorized users in allowlist",
+    "subagents": {
+      "_note": "Subagent definitions inherit sandbox mode from agents.defaults.sandbox. Never grant a subagent a wider tool scope than its parent.",
+      "_control": "AC-6, AC-3: Least privilege — child sessions cannot escalate beyond parent's toolset",
+      "inheritSandbox": true,
+      "allowChildOverrides": false
+    }
+  },
+
+  "auth": {
+    "_control": "IA-2, IA-5: Authenticator selection and management",
+    "profiles": {
+      "_note": "Every provider profile must declare mode explicitly (token | oauth | api_key). Do NOT pin secrets inline — use ref/provider (env/secret manager) so at-rest is centrally rotatable.",
+      "_control": "IA-5: Authenticator management; SC-28: Protection at rest via external secret store"
+    },
+    "order": {
+      "_note": "Explicit ordering per provider so failover paths are auditable. Never rely on iteration order of the profiles object.",
+      "_control": "CM-6: Config settings must be deterministic"
+    }
+  },
+
+  "hooks": {
+    "_note": "Hooks are the OpenClaw automation surface — inbound webhooks and PreToolUse/PostToolUse handlers. Never expose an inbound webhook without an explicit token/session/agent binding. External surfaces must be explicitly enabled; internal-only is the default.",
+    "_control": "AC-3: Access enforcement on inbound triggers; AC-6: Least privilege for hook-invoked actions",
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "_note": "Populate with the internal hooks this deployment uses (boot-md, command-logger, session-memory are the OpenClaw defaults)."
+      }
+    },
+    "external": {
+      "enabled": false,
+      "_control": "AC-17: Remote access restrictions — external hook surface disabled by default; require explicit token binding to enable"
+    }
+  },
+
+  "mcp": {
+    "servers": {
+      "_note": "Every MCP server entry needs an explicit URL and transport. Bearer tokens MUST be referenced from a secrets manager (ref/provider), not inline. Connections MUST set connectionTimeoutMs.",
+      "_control": "AC-3, SC-8, SC-28: Access enforcement + transmission confidentiality + at-rest protection for MCP credentials",
+      "_forbidden_patterns": ["wildcard hosts", "unauthenticated servers", "plaintext bearer in file"]
+    }
+  },
+
+  "browser": {
+    "enabled": false,
+    "_enabled_control": "CM-7: Least functionality — browser tool disabled unless the deployment needs it",
+    "noSandbox": false,
+    "_noSandbox_control": "AC-6: Least privilege — Chrome sandbox stays on unless the profile explicitly needs attachOnly",
+    "attachOnly": true,
+    "_attachOnly_control": "AC-3: Access enforcement — attach to an operator-supervised CDP endpoint rather than spawning a browser with agent-scope permissions",
+    "tabCleanup": {
+      "enabled": true,
+      "_control": "AC-3, SC-28: Prevent stale tabs from retaining sensitive session context"
+    }
+  },
+
+  "approvals": {
+    "_control": "AC-3, AC-6: Access enforcement + least privilege for exec/plugin approval routing",
+    "_note": "Approval routing forwards exec + plugin approval requests to chat destinations outside the originating session. Keep disabled unless operators need explicit out-of-band approval visibility — enabling widens the trust boundary.",
+    "enabled": false
+  },
+
+  "session": {
+    "compaction": {
+      "_control": "AU-9: Protection of audit information — compaction must preserve, not discard, security-relevant events",
+      "_note": "Compaction thresholds and preservation rules should be reviewed on the same cadence as CM-2 baseline reviews. See reference_openclaw_compaction_config.md."
+    }
+  },
+
+  "models": {
+    "rateLimit": {
+      "_control": "SC-5: Denial-of-service protection — rate limits bound outbound spend and prevent runaway automation loops",
+      "_note": "Set per-model rate limits, especially for hosted providers. Missing rate limits create an availability risk (spend runaway) and a data-leak risk (uncapped calls to external APIs)."
+    }
+  },
+
+  "skills": {
+    "_control": "CM-5, CM-7: Access restrictions for change + least functionality",
+    "workshop": {
+      "enabled": true,
+      "_enabled_control": "CM-5: Skill-workshop review gate blocks new-skill installs pending operator review",
+      "requireReview": true,
+      "_requireReview_control": "CM-5: All new skills route through the workshop review queue — no auto-install from ClawHub"
+    }
+  },
+
+  "sandboxes": {
+    "_control": "AC-3, AC-6: Access enforcement + least privilege",
+    "_note": "Named sandbox profiles. Every entry declares its allowed tool scope; agents referencing a sandbox inherit its constraints. Never define a 'permissive' or 'all-tools' sandbox for production agents.",
+    "defaultProfile": "restricted",
+    "profiles": {
+      "restricted": {
+        "workspaceOnly": true,
+        "execElevated": false,
+        "browser": false,
+        "network": false
+      }
+    }
+  },
+
+  "plugins": {
+    "_note": "Enable only required plugins — disable all others",
+    "_control": "CM-7: Least functionality — disable unused capabilities",
+    "workboard": {
+      "_control": "AU-2, AU-12: Auditable events + agent action logging via the workboard dispatch trail",
+      "_note": "Workboard is the durable card store for agent dispatch. Persistence is required if any agent runs long-lived cards; retention should match your audit-retention policy."
+    }
   },
 
   "tools": {
@@ -47,11 +156,6 @@
   "channels": {
     "_note": "Restrict each channel to named allowedUsers only",
     "_allowedUsers_control": "AC-2, IA-2: Authentication and account management"
-  },
-
-  "plugins": {
-    "_note": "Enable only required plugins — disable all others",
-    "_control": "CM-7: Least functionality — disable unused capabilities"
   },
 
   "memory": {

@@ -6,6 +6,89 @@ and why. Add entries at the top; do not edit historic entries.
 
 ---
 
+## 2026-08-29 — AS (Agent Safety) as a new family, not folded under SI
+
+**Issues:** [#62](https://github.com/oscarsixsecllc/sarge/issues/62),
+[#65](https://github.com/oscarsixsecllc/sarge/issues/65)
+
+Sprint 2 added coverage for tool-gate (issue #62) and workspace-attestations /
+skill-workshop / cron-trust (issue #65). Both issues ask "new family or fold
+under SI?"
+
+Decision: **new AS family, but every AS check maps back to underlying NIST
+800-53 Rev 5 controls in its catalog `family` field.**
+
+Rationale:
+
+1. **Grouping matches operator mental model.** Per
+   `project_sarge_agent_safety_lens.md`, tool-gate + attestations + workshop
+   + cron-trust are the Tier 1 agent-safety controls that make Sarge
+   *specifically* about OpenClaw hardening rather than generic OS hygiene.
+   Scattering them across AC-3 (tool-gate write-gate), AU-2 (decisions
+   ledger), CM-2 (attestations), CM-5 (workshop), CM-6 (cron-trust), and
+   SI-4 (digest) would hide the story — an operator scanning the report
+   should be able to see "agent-runtime posture is here" in one block.
+
+2. **NIST purity is preserved.** Each AS check_id documents its mapping in
+   the catalog `family` string (e.g. `AS-1 — Tool-Gate Hook Installation
+   (Sarge/OpenClaw overlay; maps to AC-3, AC-6)`). Anyone building an
+   800-53 compliance matrix from Sarge output can still enumerate the
+   NIST controls covered — the AS label is a grouping index, not a
+   replacement mapping.
+
+3. **SI fold rejected specifically.** SI-4 (system monitoring) is the
+   closest single NIST fit but only covers AS-4 (digest) and AS-3
+   (ledger freshness). AS-1 / AS-2 / AS-5 / AS-6 / AS-7 / AS-8 each
+   have different NIST anchor points (AC-3, AC-6, SI-7, CM-2, CM-5, CM-6),
+   so a SI fold would either misrepresent them or need per-check
+   sub-mapping — same story as a standalone AS family, but harder to
+   scan visually.
+
+4. **Precedent in the Windows overlay.** Sarge already ships a `WIN-*`
+   pseudo-family for Windows-specific controls that don't have a clean
+   NIST-family home. AS follows the same pattern for the OpenClaw
+   overlay.
+
+All AS checks are agent-scoped (guarded by `SARGE_HOST_ONLY`) so
+`--host-only` mode continues to emit a clean baseline scan without any
+agent-runtime context.
+
+## 2026-08-29 — Baseline schema section-mapping for openclaw.json.baseline v0.2
+
+**Issue:** [#65](https://github.com/oscarsixsecllc/sarge/issues/65) (baseline
+refresh scope)
+
+The Sprint 2 brief called for adding 11 missing keys to
+`baseline/openclaw.json.baseline`: approvalPolicy, hooks, subagents, workshop,
+compaction, rateLimit, auth.profiles, mcp.servers, browser.\*, sandboxes,
+workboard.
+
+Live OpenClaw 2026.7.x schema (`openclaw config schema`) does not expose those
+exact top-level names — several have moved into nested sections since Sarge
+day-1 was written. Explicit section mapping for this baseline update:
+
+| Brief name        | Baseline location                | Live-schema location                    |
+|-------------------|----------------------------------|-----------------------------------------|
+| approvalPolicy    | `approvals`                      | `approvals` (schema successor)          |
+| hooks             | `hooks`                          | `hooks` (top-level)                     |
+| subagents         | `agents.subagents`               | (schema-driven; nested under agents)    |
+| workshop          | `skills.workshop`                | `skills.workshop`                       |
+| compaction        | `session.compaction`             | `session.compaction`                    |
+| rateLimit         | `models.rateLimit`               | `models.rateLimit`                      |
+| auth.profiles     | `auth.profiles`                  | `auth.profiles` (top-level)             |
+| mcp.servers       | `mcp.servers`                    | `mcp.servers` (top-level)               |
+| browser.\*        | `browser` (block)                | `browser` (top-level)                   |
+| sandboxes         | `sandboxes` (block, plus inherit)| `security` / `agents.defaults.sandbox`  |
+| workboard         | `plugins.workboard`              | (plugin-scoped in current schema)       |
+
+Baseline version bumped `0.1.0 -> 0.2.0` to reflect the schema surface change.
+The file remains a documentation/hardening template — Sarge does not currently
+diff a live config against this baseline (that's future work under drift). The
+new sections carry `_control` annotations tying each hardening choice to the
+NIST 800-53 control(s) it addresses.
+
+---
+
 ## 2026-08-29 — SC-28 world-readable check: narrow to a sensitive allowlist
 
 **Issue:** [#64](https://github.com/oscarsixsecllc/sarge/issues/64)
