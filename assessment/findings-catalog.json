@@ -310,26 +310,26 @@
   },
   "SC-28-config-perm": {
     "family": "SC-28 — Protection of Information at Rest",
-    "what": "~/.openclaw/config.json permissions are not 600 or 400",
+    "what": "OpenClaw runtime config (~/.openclaw/openclaw.json, or legacy ~/.openclaw/config.json) permissions are not 600 or 400",
     "expected": "600 (or 400 if read-only is sufficient)",
-    "why": "config.json holds connection details and possibly inline credentials for the OpenClaw runtime. NIST 800-53 SC-28 requires protection of information at rest. World/group-readable config gives any local process a roadmap of services and their auth material.",
-    "fix": "chmod 600 ~/.openclaw/config.json",
+    "why": "The OpenClaw config file holds connection details and inline credentials for the runtime (provider tokens, MCP creds, delivery secrets). NIST 800-53 SC-28 requires protection of information at rest. World/group-readable config gives any local process a roadmap of services and their auth material.",
+    "fix": "chmod 600 ~/.openclaw/openclaw.json  # (or ~/.openclaw/config.json on legacy pre-2026.4 installs)",
     "scope": "agent"
   },
   "SC-28-config-owner": {
     "family": "SC-28 — Protection of Information at Rest",
-    "what": "~/.openclaw/config.json is owned by an unexpected user",
+    "what": "OpenClaw runtime config (~/.openclaw/openclaw.json, or legacy ~/.openclaw/config.json) is owned by an unexpected user",
     "expected": "Owned by the current operator/service user",
     "why": "Wrong ownership often means the file was created by a different account (root via sudo, an installer, or a previous user) and may have unexpected permission semantics. NIST 800-53 SC-28 + AC-3 require explicit ownership of sensitive resources. Sort out who is supposed to own the config and align permissions.",
-    "fix": "sudo chown $(whoami):$(whoami) ~/.openclaw/config.json",
+    "fix": "sudo chown $(whoami):$(whoami) ~/.openclaw/openclaw.json  # (or ~/.openclaw/config.json on legacy pre-2026.4 installs)",
     "scope": "agent"
   },
   "SC-28-world-readable-secrets": {
     "family": "SC-28 — Protection of Information at Rest",
-    "what": "World-readable files found inside ~/.openclaw",
-    "expected": "No files in ~/.openclaw are world-readable (mode bit o+r unset)",
-    "why": "World-readable files in the OpenClaw workspace expose agent state, memory snippets, and potentially cached credentials to any local user. NIST 800-53 SC-28 requires confidentiality at rest. Even non-secret workspace files can leak operational intelligence (agent names, schedules, target hostnames).",
-    "fix": "chmod -R o-r ~/.openclaw  # then re-verify with: find ~/.openclaw -type f -perm /004",
+    "what": "World-readable sensitive files found inside ~/.openclaw (config, secrets/, credentials/, auth/, or credential-shaped filenames)",
+    "expected": "No files matching Sarge's known-sensitive allowlist under ~/.openclaw are world-readable (mode bit o+r unset)",
+    "why": "World-readable credential material in the OpenClaw workspace exposes provider tokens, MCP credentials, and cached auth to any local user. NIST 800-53 SC-28 requires confidentiality at rest. The check is scoped to known-sensitive paths so intentionally-readable workspace canon (SOUL.md, USER.md, AGENTS.md, etc.) does not create false positives that would drown the real signal.",
+    "fix": "Fix the specific listed files: chmod 600 <path> for each. To lock down everything sensitive in one shot: sudo bash scripts/harden-permissions.sh",
     "scope": "agent"
   },
   "SI-2-security-updates-low": {

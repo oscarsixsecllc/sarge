@@ -14,6 +14,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Drift detection cron
 - ClawhHub submission
 
+### Fixed
+- **SC-28 config check + `harden-permissions.sh` now target the live OpenClaw config filename** (`openclaw.json`, with `config.json` fallback for legacy pre-2026.4 installs). Previously both looked only for the retired `config.json`, so SC-28 config-perm / config-owner silently SKIPped on every real install and `harden-permissions` never chmod'd the file that actually holds provider tokens. Config backups (`openclaw.json.bak*`, `.backup*`) get the same 600 treatment. (#61)
+- **SC-28 world-readable check narrowed to a known-sensitive allowlist** — only the OpenClaw config (+ backups), `secrets/` / `credentials/` / `auth/`, and credential-shaped filenames (`*.key`, `*.pem`, `*.env`, `*-token*`, `*-secret*`, `id_rsa*`, `id_ed25519*`). Previously flagged intentionally-readable workspace canon (SOUL.md, HEARTBEAT.md, AGENTS.md, USER.md, TOOLS.md, BOOTSTRAP.md) and `workspace/.git/*` on every install, drowning real leaks in noise. See DECISIONS.md for the scoping rationale. (#64)
+
+### Changed
+- **README validated-results and control-coverage numbers refreshed** to reflect actual output on Ubuntu 24.04 + OpenClaw 2026.7.1-2 with the two fixes above applied: 57 checks / PASS 34 / WARN 12 / FAIL 9 / SKIP 2 (was: 47 / 30 / 7 / 4 / 2). Per-family table updated (AC 17, AU 5, CM 15, IA 10, SC 5, SI 5). Old numbers were from the day-1 validation image (2026-03-19); intervening per-item enumeration expansion, stock Ubuntu 24.04 desktop packages, and the SC-28 false positive together account for the delta. (#66)
+- Added top-level `DECISIONS.md` recording non-obvious scoping calls (starting with the two SC-28 decisions above).
+
 ---
 
 ## [0.1.0] — 2026-03-18
