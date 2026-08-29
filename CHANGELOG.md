@@ -14,6 +14,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Drift detection cron
 - ClawhHub submission
 
+### Added
+- **New AS (Agent Safety) control family** covering the OpenClaw agent-runtime primitives that make Sarge specifically an agent-safety control rather than a generic OS hardener. Eleven new checks under `assessment/checks/check-as.sh`, all agent-scoped (guarded by `SARGE_HOST_ONLY`): (#62, #65)
+  - **AS-1** tool-gate hook installation (files present AND wired into `~/.claude/settings.json`)
+  - **AS-2** tool-gate enforcement mode (`~/.config/o6-gate-mode`: FAIL missing, WARN shadow, PASS tier-c/tier-bc)
+  - **AS-3** decisions ledger permissions (600) and freshness (mtime within 7 days)
+  - **AS-4** daily digest cron registered
+  - **AS-5** `gate_common.py` integrity vs upstream reference
+  - **AS-6** workspace-attestations directory (700, newest attestation within 30 days)
+  - **AS-7** skill-workshop review gate present
+  - **AS-8** cron-trust.json permissions (600) and per-entry `CRON_JOB_NAME` coverage
+  - Each AS check maps to underlying NIST 800-53 Rev 5 controls in its catalog entry (AC-3, AC-6, AU-2, AU-9, CM-2, CM-5, CM-6, CM-7, SI-4, SI-7). See DECISIONS.md for the fold-under-SI-vs-new-family reasoning.
+- New integration test `tests/integration/agent-safety-checks.sh` — 19 assertions covering three end-to-end scenarios (nothing installed / everything present / weak permissions), catalog coverage, and the host-only-mode agent-scope guard.
+- **Baseline schema refresh (`baseline/openclaw.json.baseline` v0.2.0)** — added 11 sections that had drifted out since 2026-03: `approvals` (approval routing), `hooks`, `agents.subagents`, `skills.workshop`, `session.compaction`, `models.rateLimit`, `auth.profiles`, `mcp.servers`, `browser`, `sandboxes`, `plugins.workboard`. Each section carries `_control` annotations tying the hardening choice to the covering NIST 800-53 control. Section-mapping decisions documented in DECISIONS.md. (#65)
+
 ### Fixed
 - **SC-28 config check + `harden-permissions.sh` now target the live OpenClaw config filename** (`openclaw.json`, with `config.json` fallback for legacy pre-2026.4 installs). Previously both looked only for the retired `config.json`, so SC-28 config-perm / config-owner silently SKIPped on every real install and `harden-permissions` never chmod'd the file that actually holds provider tokens. Config backups (`openclaw.json.bak*`, `.backup*`) get the same 600 treatment. (#61)
 - **SC-28 world-readable check narrowed to a known-sensitive allowlist** — only the OpenClaw config (+ backups), `secrets/` / `credentials/` / `auth/`, and credential-shaped filenames (`*.key`, `*.pem`, `*.env`, `*-token*`, `*-secret*`, `id_rsa*`, `id_ed25519*`). Previously flagged intentionally-readable workspace canon (SOUL.md, HEARTBEAT.md, AGENTS.md, USER.md, TOOLS.md, BOOTSTRAP.md) and `workspace/.git/*` on every install, drowning real leaks in noise. See DECISIONS.md for the scoping rationale. (#64)

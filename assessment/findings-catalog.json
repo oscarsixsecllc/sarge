@@ -716,5 +716,94 @@
     "why": "Capturing the applied-policy inventory is the precondition for the verdict-overlay in Phase 1b. The JSON document is also useful for audit evidence under CM-6 (record of configuration settings actually applied to the system).",
     "fix": "Not applicable - informational only. Inspect policy-inventory.json in the run folder for the captured settings.",
     "severity": "info"
+  },
+
+  "AS-1-tool-gate-installed": {
+    "family": "AS-1 — Tool-Gate Hook Installation (Sarge/OpenClaw overlay; maps to AC-3, AC-6)",
+    "what": "tool-gate.py + taint-record.py missing from ~/.claude/hooks/, or hook files present but not referenced from ~/.claude/settings.json",
+    "expected": "Both hook files present, executable, AND referenced from hooks.PreToolUse (tool-gate.py) / hooks.PostToolUse (taint-record.py) in ~/.claude/settings.json",
+    "why": "Tool-gate is the OpenClaw enforcement point for AC-3 (access enforcement — blocks privileged writes driven by untrusted input) and AC-6 (least privilege — origin-scoped tool routing). A hook file that isn't wired into settings never fires; a settings entry pointing at a missing file crashes the runtime. Either state removes the enforcement layer without any indication in normal operation.",
+    "fix": "Reinstall tool-gate: cp /home/oscar/openclaw/security/tool-gate/tool-gate.py /home/oscar/openclaw/security/tool-gate/taint-record.py /home/oscar/openclaw/security/tool-gate/gate_common.py ~/.claude/hooks/  && verify ~/.claude/settings.json contains hooks.PreToolUse -> tool-gate.py and hooks.PostToolUse -> taint-record.py",
+    "scope": "agent"
+  },
+  "AS-2-gate-mode": {
+    "family": "AS-2 — Tool-Gate Enforcement Mode (Sarge/OpenClaw overlay; maps to AC-3, CM-6)",
+    "what": "~/.config/o6-gate-mode is missing, is 'shadow' (log-only), or contains an unknown value",
+    "expected": "'tier-c' (block Tier-C actions) or 'tier-bc' (block Tier-B and Tier-C). 'shadow' is acceptable during initial rollout only.",
+    "why": "The mode file is the single source of truth for whether tool-gate enforces or merely observes. Missing = no explicit mode (dangerous — a caller may assume enforcement is on); 'shadow' = decisions logged but nothing blocked. Both leave the AC-3 enforcement claim without a control behind it.",
+    "fix": "echo 'tier-c' > ~/.config/o6-gate-mode  # or 'tier-bc' for stricter enforcement once you've had a clean shadow-mode window",
+    "scope": "agent"
+  },
+  "AS-3-decisions-ledger-perm": {
+    "family": "AS-3 — Tool-Gate Decisions Ledger (Sarge/OpenClaw overlay; maps to AU-2, AU-9)",
+    "what": "~/.openclaw/state/tool-gate/decisions.jsonl missing, or permissions are not 600/400",
+    "expected": "File exists with permissions 600 (or 400) and is owned by the operator",
+    "why": "decisions.jsonl is tool-gate's audit trail — every tool call, taint classification, and block decision. Missing = no audit trail (violates AU-2 — auditable events must be recorded). Weak permissions = a local process can tamper with or read gate reasoning (violates AU-9 — protection of audit information).",
+    "fix": "chmod 600 ~/.openclaw/state/tool-gate/decisions.jsonl  # if missing, run any Claude Code invocation to initialize it",
+    "scope": "agent"
+  },
+  "AS-3-decisions-ledger-fresh": {
+    "family": "AS-3 — Tool-Gate Decisions Ledger (Sarge/OpenClaw overlay; maps to AU-2)",
+    "what": "decisions.jsonl has not been modified in the last 7 days",
+    "expected": "Ledger modified within the last 7 days (evidence the hook is still firing)",
+    "why": "A stale ledger on an active host means tool-gate has silently stopped firing — the hook file could be there, referenced, and still not running (permission drift, python interpreter gone, settings.json syntax error swallowed). AU-2 requires the events to actually be recorded, not just recordable.",
+    "fix": "Verify PreToolUse hook fires: run any Claude Code interaction, then check `stat ~/.openclaw/state/tool-gate/decisions.jsonl` for a fresh mtime. Also verify ~/.claude/settings.json has valid JSON and hooks.PreToolUse still references tool-gate.py.",
+    "scope": "agent"
+  },
+  "AS-4-digest-cron": {
+    "family": "AS-4 — Tool-Gate Daily Digest (Sarge/OpenClaw overlay; maps to SI-4, AU-6)",
+    "what": "gate-digest.sh is not registered in crontab",
+    "expected": "A crontab entry runs ~/.claude/hooks/gate-digest.sh --post at least once per day",
+    "why": "gate-digest.sh summarizes would-block events (shadow-mode) and enforcement outcomes and posts them to Discord. Without it, the tool-gate signal is invisible to operators — SI-4 (system monitoring) has no reporting surface, and AU-6 (audit review) never happens.",
+    "fix": "crontab -e  # add: 0 8 * * * /home/oscar/.claude/hooks/gate-digest.sh --post >> /home/oscar/.openclaw/state/tool-gate/digest.log 2>&1",
+    "scope": "agent"
+  },
+  "AS-5-gate-common-integrity": {
+    "family": "AS-5 — gate_common.py Integrity (Sarge/OpenClaw overlay; maps to SI-7, CM-6)",
+    "what": "Deployed ~/.claude/hooks/gate_common.py differs from upstream ~/openclaw/security/tool-gate/gate_common.py",
+    "expected": "SHA-256 of deployed file matches upstream reference",
+    "why": "gate_common.py defines SENSITIVE_WRITE_PATHS and taint-promotion logic. A tampered copy could silently narrow the gate (remove a path, weaken a promotion rule) without changing observable behavior on benign calls. SI-7 (software integrity) requires detection of unauthorized changes; CM-6 (config settings) requires the enforcement config to match the approved baseline.",
+    "fix": "diff ~/.claude/hooks/gate_common.py ~/openclaw/security/tool-gate/gate_common.py  # if the deployed copy has drifted intentionally, update the upstream reference and re-copy; if unexplained, restore from upstream: cp ~/openclaw/security/tool-gate/gate_common.py ~/.claude/hooks/",
+    "scope": "agent"
+  },
+  "AS-6-attestations-dir-perm": {
+    "family": "AS-6 — Workspace Attestations (Sarge/OpenClaw overlay; maps to CM-2, SI-7)",
+    "what": "~/.openclaw/workspace-attestations/ missing, or permissions are not 700",
+    "expected": "Directory exists with permissions 700, owned by the operator",
+    "why": "workspace-attestations/ records signed attestations of workspace canon (SOUL.md, USER.md, AGENTS.md) — the baseline against which drift is measured. Missing = no CM-2 baseline. World/group-readable = a local process can enumerate every attested state, weakening the SI-7 integrity claim.",
+    "fix": "mkdir -p ~/.openclaw/workspace-attestations && chmod 700 ~/.openclaw/workspace-attestations  # if OpenClaw has never run an attestation, trigger one via the workspace-attest workflow",
+    "scope": "agent"
+  },
+  "AS-6-attestations-fresh": {
+    "family": "AS-6 — Workspace Attestations (Sarge/OpenClaw overlay; maps to CM-2, SI-7)",
+    "what": "No attestation file present, or the newest attestation is older than 30 days",
+    "expected": "At least one *.attested file, newest modified within the last 30 days",
+    "why": "A workspace-attestation baseline is only meaningful while it reflects the currently intended state. Stale attestations mean drift comparisons chase noise instead of real changes. CM-2 requires baselines to be reviewed on a defined cadence.",
+    "fix": "Trigger a fresh workspace attestation via OpenClaw (the mechanism depends on your install; see project_openclaw_upgrade_skill_workshop.md for the 6.x flow).",
+    "scope": "agent"
+  },
+  "AS-7-workshop-present": {
+    "family": "AS-7 — Skill-Workshop Review Gate (Sarge/OpenClaw overlay; maps to CM-5, CM-7)",
+    "what": "~/.openclaw/skill-workshop/ missing, or proposals/ subdirectory missing",
+    "expected": "skill-workshop/ present with proposals/ subdirectory initialized (review queue available for new skills)",
+    "why": "Skill-workshop is the review-gated ingestion point for new skills (added in the OpenClaw 5.7 -> 6.x upgrade). Without it, ClawHub or ad-hoc skills install directly with no operator review — CM-5 (access restrictions for change) collapses, and CM-7 (least functionality) has no gate to enforce.",
+    "fix": "Upgrade OpenClaw to a version that ships the skill-workshop primitive (>= 6.x), then enable it in config (workshop.enabled: true). See project_openclaw_upgrade_skill_workshop.md.",
+    "scope": "agent"
+  },
+  "AS-8-cron-trust-perm": {
+    "family": "AS-8 — Cron-Trust Registration (Sarge/OpenClaw overlay; maps to CM-6, AU-2)",
+    "what": "~/.openclaw/state/tool-gate/cron-trust.json missing, or permissions are not 600/400",
+    "expected": "File exists with permissions 600 (or 400) and is owned by the operator",
+    "why": "cron-trust.json is the allowlist tool-gate consults to decide whether a cron-triggered tool call counts as trusted-origin (operator-installed cadence) or external-origin (block Tier-B/C). Missing = every cron job is treated as external and legitimate cadences fail. World/group-writable = a local process can silently add itself to the trusted-origin list.",
+    "fix": "Restore or initialize the file: touch ~/.openclaw/state/tool-gate/cron-trust.json && chmod 600 ~/.openclaw/state/tool-gate/cron-trust.json  # then repopulate CRON_JOB_NAME entries per feedback_cron_jobs_need_gate_registration.md",
+    "scope": "agent"
+  },
+  "AS-8-cron-trust-coverage": {
+    "family": "AS-8 — Cron-Trust Registration (Sarge/OpenClaw overlay; maps to CM-6, AU-2)",
+    "what": "One or more crontab entries reference openclaw / claude / gateway pathways without setting CRON_JOB_NAME",
+    "expected": "Every runtime-related crontab entry declares CRON_JOB_NAME=<key> so tool-gate can look the entry up in cron-trust.json",
+    "why": "Per feedback_cron_jobs_need_gate_registration.md, unregistered crons cost 266 false-positive taint promotions before the gap was noticed. CM-6 (config settings) requires the enforcement config to be complete for the assets it protects, and AU-2 needs the cron identity in the audit trail.",
+    "fix": "For each flagged crontab line, add a CRON_JOB_NAME assignment (e.g. `CRON_JOB_NAME=my-cadence /path/to/script.sh`) and a matching entry in ~/.openclaw/state/tool-gate/cron-trust.json with the right tier gate.",
+    "scope": "agent"
   }
 }
