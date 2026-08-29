@@ -39,6 +39,35 @@ macos_world_readable_files_in() {
   find "$1" -type f -perm -o+r 2>/dev/null | head -10
 }
 
+# Print world-readable files under a directory that match Sarge's
+# known-sensitive allowlist. Mirrors ubuntu_world_readable_sensitive_files_in
+# — see the header on that function for the scope rationale. BSD find
+# does not implement `-ipath`, so we lowercase-match via `-iname` on
+# well-known subdirectory names by walking with `-path`.
+macos_world_readable_sensitive_files_in() {
+  find "$1" -type f -perm -o+r \( \
+       -path "$1/openclaw.json" \
+    -o -path "$1/config.json" \
+    -o -name "openclaw.json.bak*" \
+    -o -name "openclaw.json.backup*" \
+    -o -name "config.json.bak*" \
+    -o -name "config.json.backup*" \
+    -o -path "$1/secrets/*" \
+    -o -path "$1/Secrets/*" \
+    -o -path "$1/credentials/*" \
+    -o -path "$1/Credentials/*" \
+    -o -path "$1/auth/*" \
+    -o -path "$1/Auth/*" \
+    -o -name "*.key" \
+    -o -name "*.pem" \
+    -o -name "*.env" \
+    -o -name "*-token*" \
+    -o -name "*-secret*" \
+    -o -name "id_rsa*" \
+    -o -name "id_ed25519*" \
+  \) 2>/dev/null | head -10
+}
+
 # ---------- Accounts (AC family) ----------
 
 # Print non-system users (UID >= 500, name not starting with "_") whose

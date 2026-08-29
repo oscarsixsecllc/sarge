@@ -21,6 +21,37 @@ ubuntu_world_readable_files_in() {
   find "$1" -type f -perm /004 2>/dev/null | head -10
 }
 
+# Print world-readable files under a directory that match Sarge's
+# known-sensitive allowlist (newline-separated, capped). Scope is narrow
+# on purpose — see the SC-28 comment in assessment/checks/check-sc.sh
+# and issue #64. The list captures:
+#   - the live and legacy OpenClaw config (openclaw.json / config.json)
+#     and any of their `.bak*` / `.backup*` siblings
+#   - anything under secrets/, credentials/, auth/ (case-insensitive)
+#   - filename patterns that look like credential material
+#     (*.key, *.pem, *.env, *-token*, *-secret*, id_rsa*, id_ed25519*)
+# Symbolic -perm form is portable across BSD and GNU find.
+ubuntu_world_readable_sensitive_files_in() {
+  find "$1" -type f -perm -o+r \( \
+       -path "$1/openclaw.json" \
+    -o -path "$1/config.json" \
+    -o -name "openclaw.json.bak*" \
+    -o -name "openclaw.json.backup*" \
+    -o -name "config.json.bak*" \
+    -o -name "config.json.backup*" \
+    -o -ipath "$1/secrets/*" \
+    -o -ipath "$1/credentials/*" \
+    -o -ipath "$1/auth/*" \
+    -o -name "*.key" \
+    -o -name "*.pem" \
+    -o -name "*.env" \
+    -o -name "*-token*" \
+    -o -name "*-secret*" \
+    -o -name "id_rsa*" \
+    -o -name "id_ed25519*" \
+  \) 2>/dev/null | head -10
+}
+
 # ---------- Accounts (AC family) ----------
 
 # Print users that have an empty password field in /etc/shadow.

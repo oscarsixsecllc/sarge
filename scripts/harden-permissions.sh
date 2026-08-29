@@ -56,6 +56,22 @@ if [[ -d "$OC_DIR" ]]; then
     chmod 700 "$OC_DIR/secrets" && echo "  Set $OC_DIR/secrets → 700"
     find "$OC_DIR/secrets" -type f -exec chmod 600 {} \; 2>/dev/null && echo "  Set secret files → 600"
   fi
-  [[ -f "$OC_DIR/config.json" ]] && chmod 600 "$OC_DIR/config.json" && echo "  Set config.json → 600"
+  # Lock down the OpenClaw runtime config. The live filename changed
+  # from `config.json` to `openclaw.json` around 2026-04; harden both
+  # names so upgraded and legacy installs are both covered. Any config
+  # backups (openclaw.json.bak, .backup-YYYYMMDD, etc.) carry the same
+  # secrets and get the same treatment. See issue #61.
+  for cfg in "$OC_DIR/openclaw.json" "$OC_DIR/config.json"; do
+    if [[ -f "$cfg" ]]; then
+      chmod 600 "$cfg" && echo "  Set $(basename "$cfg") → 600"
+    fi
+  done
+  shopt -s nullglob
+  for bak in "$OC_DIR"/openclaw.json.bak* "$OC_DIR"/openclaw.json.backup* \
+             "$OC_DIR"/config.json.bak*    "$OC_DIR"/config.json.backup*; do
+    [[ -f "$bak" ]] || continue
+    chmod 600 "$bak" && echo "  Set $(basename "$bak") → 600"
+  done
+  shopt -u nullglob
 fi
 echo "[Sarge] Permissions hardening applied."

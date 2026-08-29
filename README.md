@@ -14,7 +14,7 @@ Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool,
 
 ## What Sarge Does
 
-- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **47 controls assessed across 6 control families.**
+- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **57 checks across 6 control families** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x.
 - 🔒 **Hardening Scripts** — Idempotent, auditable bash scripts for UFW, auditd, PAM (faillock + pwquality), fail2ban, systemd service hardening, and file permissions.
 - 📸 **Drift Detection** — Compares current system state against a captured baseline. Any drift generates a notification via your OpenClaw-configured channel.
 - 🗺️ **Control Mapping** — Every OpenClaw setting and OS-level recommendation mapped to its 800-53 control ID, in both JSON and Markdown.
@@ -80,17 +80,21 @@ In host-only mode, agent-scoped findings are excluded entirely (not even SKIP �
 
 ---
 
-## Control Coverage (v0.1.1)
+## Control Coverage
 
-| Family | ID | Controls Assessed | Coverage |
-|--------|----|-------------------|----------|
-| Access Control | AC | 8 | Full |
-| Audit & Accountability | AU | 8 | Full |
-| Configuration Management | CM | 10 | Full |
+Ubuntu 24.04 LTS + OpenClaw 2026.7.x, run date 2026-08-29:
+
+| Family | ID | Checks Emitted | Coverage |
+|--------|----|----------------|----------|
+| Access Control | AC | 17 | Full |
+| Audit & Accountability | AU | 5 | Full |
+| Configuration Management | CM | 15 | Full |
 | Identification & Authentication | IA | 10 | Full |
-| System & Communications Protection | SC | 6 | Partial |
+| System & Communications Protection | SC | 5 | Partial |
 | System & Information Integrity | SI | 5 | Partial |
-| **Total** | | **47** | |
+| **Total** | | **57** | |
+
+Per-file secrets checks (AC-3), per-service CM-7 checks, and per-class pwquality (IA-5) checks each emit one finding per item, so the total scales with what's on the host — 57 is the number Sarge emits on a normally-provisioned OpenClaw 2026.7 install; a stripped-down VM may show fewer.
 
 **Baseline:** NIST SP 800-53 Rev 5 | **Platforms:** Ubuntu 22.04 / 24.04 LTS (full); macOS (gap analysis + drift; permissions hardening only); Windows (detection + breadth-first recommendations across all 6 control families; hardening blocked on pre-hardening backup work)
 
@@ -106,16 +110,17 @@ In host-only mode, agent-scoped findings are excluded entirely (not even SKIP �
 
 ## Validated Results
 
-On a clean Ubuntu 24.04 LTS system with Sarge hardening applied:
+Ubuntu 24.04 LTS host, OpenClaw 2026.7.1-2, run date 2026-08-29:
 
 | Status | Count |
 |--------|-------|
-| ✅ PASS | 30 |
-| ⚠️ WARN | 7 |
-| ❌ FAIL | 4 (systemd-dependent services only) |
+| ✅ PASS | 34 |
+| ⚠️ WARN | 12 |
+| ❌ FAIL | 9 |
 | ⏭️ SKIP | 2 |
+| **Total** | **57** |
 
-The 4 remaining FAILs (auditd daemon, pam_faillock, fail2ban) require systemd and will pass on a standard Linux VM.
+Numbers were captured on this VM (development host, no hardening applied) — treat them as an indicative baseline, not a target. On a hardened VM with `scripts/install.sh` completed, WARN and FAIL counts collapse toward zero as ufw, auditd, pam_faillock, fail2ban, systemd-service hardening, and file-permission fixes land. A few WARN/FAIL cells are structurally expected on a stock desktop image (e.g. per-class pwquality character-class WARNs, avahi/cups running on a desktop profile) and are addressed by running the corresponding `harden-*` module.
 
 > **Testing in containers — known limitation.** When running `scripts/install.sh` inside a default Docker container (PID 1 = `bash`/`sleep`, no systemd), only `harden-permissions` and `harden-pam` will apply — the other 4 modules error at `systemctl is-system-running`. To exercise the full install flow in a container, start it with systemd as PID 1 (`docker run --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /run -e container=docker <image> /sbin/init`), or use a real VM (multipass / vagrant / lima). Validation runs against a standard Ubuntu 24.04 LTS VM, not a container.
 
