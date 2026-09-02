@@ -59,6 +59,42 @@
       "remediation": "Ensure audit records include timestamp, user, action, and outcome."
     },
     {
+      "id": "AU-4",
+      "family": "AU",
+      "name": "Audit Log Storage Capacity",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["df -P /var/log/audit", "df -P /var/log"],
+      "remediation": "Ensure the audit log partition retains at least 10% free space. Configure log rotation with adequate headroom or expand storage."
+    },
+    {
+      "id": "AU-5",
+      "family": "AU",
+      "name": "Response to Audit Processing Failures",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["grep disk_full_action /etc/audit/auditd.conf", "grep admin_space_left_action /etc/audit/auditd.conf"],
+      "remediation": "Set disk_full_action and admin_space_left_action in auditd.conf to something other than IGNORE (e.g. SYSLOG, EMAIL, HALT)."
+    },
+    {
+      "id": "AU-7",
+      "family": "AU",
+      "name": "Audit Record Reduction and Report Generation",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["which journalctl", "which ausearch", "grep -r '@' /etc/rsyslog.d/"],
+      "remediation": "Install auditd (provides ausearch) or configure rsyslog forwarding so audit records can be queried and aggregated."
+    },
+    {
+      "id": "AU-8",
+      "family": "AU",
+      "name": "Time Stamps",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["timedatectl show -p NTPSynchronized", "chronyc tracking"],
+      "remediation": "Enable NTP synchronization: sudo timedatectl set-ntp true."
+    },
+    {
       "id": "AU-9",
       "family": "AU",
       "name": "Protection of Audit Information",
@@ -66,6 +102,15 @@
       "openclaw_settings": [],
       "os_checks": ["ls -la /var/log/audit/", "stat /var/log/audit/audit.log"],
       "remediation": "Audit logs must be owned by root, mode 600. Restrict write access."
+    },
+    {
+      "id": "AU-11",
+      "family": "AU",
+      "name": "Audit Record Retention",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["grep rotate /etc/logrotate.d/auditd"],
+      "remediation": "Configure logrotate for audit logs with a 'rotate' count of at least 4 (weekly rotation) to meet minimum retention."
     },
     {
       "id": "AU-12",
@@ -129,6 +174,42 @@
       "openclaw_settings": [],
       "os_checks": ["grep pam_unix /etc/pam.d/common-auth"],
       "remediation": "Ensure login failure messages do not reveal whether username or password was wrong."
+    },
+    {
+      "id": "IA-4",
+      "family": "IA",
+      "name": "Identifier Management",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["awk -F: '{print $3}' /etc/passwd | sort | uniq -d"],
+      "remediation": "Eliminate duplicate UIDs in /etc/passwd. Never reuse a UID after deleting an account."
+    },
+    {
+      "id": "IA-7",
+      "family": "IA",
+      "name": "Cryptographic Module Authentication",
+      "status": "full",
+      "openclaw_settings": ["gateway.tls"],
+      "os_checks": ["grep Protocol /etc/ssh/sshd_config", "grep Ciphers /etc/ssh/sshd_config"],
+      "remediation": "Disable SSHv1 and weak ciphers (3DES, RC4/arcfour, CBC-mode) in sshd_config. Set gateway TLS minVersion to TLSv1.2 or higher."
+    },
+    {
+      "id": "IA-8",
+      "family": "IA",
+      "name": "Identification and Authentication (Non-Org Users)",
+      "status": "full",
+      "openclaw_settings": ["auth.mode", "auth.providers"],
+      "os_checks": ["grep -o auth.mode/providers in openclaw.json"],
+      "remediation": "Set an explicit auth.mode and register auth.providers. Disable anonymous access so external channel users (Discord/Telegram/etc.) are identified before gateway trust."
+    },
+    {
+      "id": "IA-11",
+      "family": "IA",
+      "name": "Re-authentication",
+      "status": "full",
+      "openclaw_settings": ["mcp.sessionIdleTtlMs"],
+      "os_checks": ["grep sessionIdleTtlMs in openclaw.json"],
+      "remediation": "Set mcp.sessionIdleTtlMs to a finite, reasonable value (e.g. 24h or less) so idle sessions require re-authentication."
     },
     {
       "id": "SC-8",

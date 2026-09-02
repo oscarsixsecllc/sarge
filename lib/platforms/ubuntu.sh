@@ -114,6 +114,62 @@ ubuntu_system_logger_active() { systemctl is-active --quiet systemd-journald 2>/
 # Output of `journalctl --disk-usage` (used to detect persisted journals).
 ubuntu_journal_disk_usage() { journalctl --disk-usage 2>/dev/null; }
 
+# Percentage of free space on the partition backing the audit log
+# directory (falls back to /var/log if /var/log/audit doesn't exist).
+# Prints an integer 0-100. Empty if df is unavailable or the path is
+# missing entirely.
+ubuntu_log_partition_free_pct() {
+  local target="/var/log/audit"
+  [[ -d "$target" ]] || target="/var/log"
+  df -P "$target" 2>/dev/null | awk 'NR==2 { gsub("%","",$5); print 100-$5 }'
+}
+
+ubuntu_auditd_config_path() { echo "/etc/audit/auditd.conf"; }
+
+# Read `key = value` from auditd.conf (case-insensitive key match). Empty
+# if unset or the file doesn't exist.
+ubuntu_auditd_config_value() {
+  grep -i "^$1" "$(ubuntu_auditd_config_path)" 2>/dev/null | awk -F= '{print $2}' | tr -d ' '
+}
+
+ubuntu_journalctl_available() { command -v journalctl &>/dev/null; }
+ubuntu_ausearch_available()   { command -v ausearch &>/dev/null; }
+
+# 0 if rsyslog is configured to forward logs to a remote collector
+# (legacy `*.* @host` / `@@host` syntax or modern omfwd action blocks).
+ubuntu_syslog_forwarding_configured() {
+  grep -rhE '^\s*\*\.\*\s+@|action\(type="omfwd"' /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null | grep -q .
+}
+
+# 0 if the system clock is synchronized via NTP (timedatectl first,
+# chrony as fallback for hosts running chronyd directly).
+ubuntu_time_sync_active() {
+  local synced
+  synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
+  [[ "$synced" == "yes" ]] && return 0
+  chronyc tracking 2>/dev/null | grep -qi "Leap status.*Normal"
+}
+
+# Human-readable time sync status, for diagnostics only.
+ubuntu_time_sync_status_text() {
+  timedatectl status 2>/dev/null || chronyc tracking 2>/dev/null || echo ""
+}
+
+# Path to the logrotate config governing the audit log, if any exists.
+ubuntu_logrotate_audit_config_path() {
+  local f
+  for f in /etc/logrotate.d/auditd /etc/logrotate.d/audit; do
+    [[ -f "$f" ]] && { echo "$f"; return 0; }
+  done
+  echo "/etc/logrotate.d/auditd"
+}
+
+# Read the `rotate N` cycle count from a logrotate config file. Empty if
+# unset or the file doesn't exist.
+ubuntu_logrotate_rotate_count() {
+  grep -E "^\s*rotate\s+[0-9]+" "$1" 2>/dev/null | awk '{print $2}' | head -1
+}
+
 # ---------- Packages / Services (CM family + SI family) ----------
 
 # 0 if a deb package is installed.
@@ -249,17 +305,51 @@ ubuntu_verify_checksums() { sha256sum --check "$1" --quiet 2>/dev/null; }
 #      pipeline exit is from head (zero on empty stdin). Capture-then-
 #      default sidesteps that entirely.
 _ubuntu_drift_fields() {
-  local ufw auditd f2b perm pmd
+  local ufw auditd f2b perm pmd log_free ntp_sync disk_full_action rotate_count
+  local dup_uid_count ssh_protocol_1 ia_oc_config auth_mode session_idle_ttl
   ufw=$(ufw status 2>/dev/null | head -1) || true
   auditd=$(systemctl is-active auditd 2>/dev/null) || true
   f2b=$(systemctl is-active fail2ban 2>/dev/null) || true
   perm=$(stat -c '%a' "$HOME/.openclaw" 2>/dev/null) || true
   pmd=$(grep ^PASS_MAX_DAYS /etc/login.defs 2>/dev/null | awk '{print $2}') || true
+  log_free=$(ubuntu_log_partition_free_pct) || true
+  ntp_sync=$(ubuntu_time_sync_active && echo "yes" || echo "no") || true
+  disk_full_action=$(ubuntu_auditd_config_value "disk_full_action") || true
+  rotate_count=$(ubuntu_logrotate_rotate_count "$(ubuntu_logrotate_audit_config_path)") || true
+  # IA-4: duplicate UID count (identifier reuse signal)
+  dup_uid_count=$(awk -F: '{print $3}' /etc/passwd 2>/dev/null | sort | uniq -d | wc -l | tr -d '[:space:]') || true
+  # IA-7: whether SSHv1 (Protocol 1) is explicitly configured
+  if grep -qiE "^[[:space:]]*Protocol[[:space:]]+1(\b|,)" /etc/ssh/sshd_config 2>/dev/null; then
+    ssh_protocol_1="yes"
+  else
+    ssh_protocol_1="no"
+  fi
+  # IA-8 / IA-11: OpenClaw gateway auth mode + session idle TTL. Same
+  # openclaw.json -> config.json fallback used by check-ia.sh and
+  # check-sc.sh (issue #61).
+  for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+    if [[ -f "$candidate" ]]; then
+      ia_oc_config="$candidate"
+      break
+    fi
+  done
+  if [[ -n "${ia_oc_config:-}" ]]; then
+    auth_mode=$(grep -oE '"mode"[[:space:]]*:[[:space:]]*"[^"]*"' "$ia_oc_config" 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)"$/\1/') || true
+    session_idle_ttl=$(grep -oE '"sessionIdleTtlMs"[[:space:]]*:[[:space:]]*[0-9]+' "$ia_oc_config" 2>/dev/null | grep -oE '[0-9]+$' | head -1) || true
+  fi
   echo "ufw_status=${ufw:-unknown}"
   echo "auditd_active=${auditd:-unknown}"
   echo "fail2ban_active=${f2b:-unknown}"
   echo "openclaw_dir_perm=${perm:-unknown}"
   echo "pass_max_days=${pmd:-unknown}"
+  echo "log_partition_free_pct=${log_free:-unknown}"
+  echo "ntp_synchronized=${ntp_sync:-unknown}"
+  echo "auditd_disk_full_action=${disk_full_action:-unknown}"
+  echo "auditd_log_rotate_count=${rotate_count:-unknown}"
+  echo "duplicate_uid_count=${dup_uid_count:-unknown}"
+  echo "ssh_protocol_1_configured=${ssh_protocol_1:-unknown}"
+  echo "gateway_auth_mode=${auth_mode:-unknown}"
+  echo "gateway_session_idle_ttl_ms=${session_idle_ttl:-unknown}"
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in
