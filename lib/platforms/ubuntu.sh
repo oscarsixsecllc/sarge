@@ -260,6 +260,9 @@ _ubuntu_drift_fields() {
   echo "fail2ban_active=${f2b:-unknown}"
   echo "openclaw_dir_perm=${perm:-unknown}"
   echo "pass_max_days=${pmd:-unknown}"
+
+  # OpenClaw config surface (shared across platforms, defined in _dispatch.sh)
+  _sarge_openclaw_config_drift_fields
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in

@@ -268,6 +268,9 @@ _macos_drift_fields() {
   echo "ssh_permit_root_login=${permit_root:-unset}"
   echo "ssh_password_auth=${pw_auth:-unset}"
   echo "system_integrity_protection=${sip:-unknown}"
+
+  # OpenClaw config surface (shared across platforms, defined in _dispatch.sh)
+  _sarge_openclaw_config_drift_fields
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in
