@@ -1,49 +1,49 @@
 {
   "_doc": {
     "purpose": "Per-finding rationale catalog for sarge reports. report.sh joins this with assessment results by check_id to render the Findings section.",
-    "naming_convention": "<NIST-FAMILY>-<CONTROL-NUMBER>-<short-slug>. Family + control are uppercase (e.g. AC-3); slug is lowercase-kebab. Examples: AC-3-secrets-perm, CM-7-cups-running, IA-5-pwquality-minlen. IDs are stable — once published do not rename without a migration note.",
+    "naming_convention": "<NIST-FAMILY>-<CONTROL-NUMBER>-<short-slug>. Family + control are uppercase (e.g. AC-3); slug is lowercase-kebab. Examples: AC-3-secrets-perm, CM-7-cups-running, IA-5-pwquality-minlen. IDs are stable \u2014 once published do not rename without a migration note.",
     "schema": {
-      "family": "Long name of the NIST 800-53 Rev 5 family + control (e.g. 'AC-3 — Access Enforcement').",
-      "what": "Short description of the observed condition. Templates may include shell-style placeholders like {value} that report.sh leaves as-is — the finding 'description' from the check script is what actually appears in reports; this 'what' is reference-only.",
+      "family": "Long name of the NIST 800-53 Rev 5 family + control (e.g. 'AC-3 \u2014 Access Enforcement').",
+      "what": "Short description of the observed condition. Templates may include shell-style placeholders like {value} that report.sh leaves as-is \u2014 the finding 'description' from the check script is what actually appears in reports; this 'what' is reference-only.",
       "expected": "What the value/state should be. May be a string or a per-platform map (same shape as 'fix').",
       "why": "2-3 sentences explaining the security risk. References the NIST 800-53 Rev 5 control by name. May be a string or a per-platform map (same shape as 'fix').",
       "fix": "Runnable command or one-line action. May be a string or a per-platform map: {\"default\": \"...\", \"macos\": \"...\", \"ubuntu\": \"...\"}. report.sh resolves via $SARGE_OS with fallback to 'default'.",
-      "scope": "\"host\" (default) or \"agent\" — agent-scoped findings probe the OpenClaw / agent-runtime overlay and are excluded in --host-only mode."
+      "scope": "\"host\" (default) or \"agent\" \u2014 agent-scoped findings probe the OpenClaw / agent-runtime overlay and are excluded in --host-only mode."
     },
     "coverage": "Every fail \"...\" and warn \"...\" callsite in assessment/checks/check-*.sh. PASS/SKIP do not need entries."
   },
   "AC-2-empty-password": {
-    "family": "AC-2 — Account Management",
+    "family": "AC-2 \u2014 Account Management",
     "what": "Local account(s) found with empty password fields in /etc/shadow",
     "expected": "All accounts have a password set or are locked",
     "why": "An empty password field allows login with no authentication, defeating identity assurance entirely. NIST 800-53 AC-2 requires the organization to manage account credentials and disable inactive or improperly provisioned accounts. Empty-password accounts are usually leftover service accounts or misconfigured users that an attacker can pivot through trivially.",
     "fix": "sudo passwd -l <username>  # lock the account, or set a password with: sudo passwd <username>"
   },
   "AC-2-uid-zero": {
-    "family": "AC-2 — Account Management",
+    "family": "AC-2 \u2014 Account Management",
     "what": "Non-root account(s) found with UID 0 in /etc/passwd",
     "expected": "Only the 'root' account has UID 0",
-    "why": "UID 0 is the kernel's superuser — any account assigned UID 0 is root, regardless of name. NIST 800-53 AC-2 requires authoritative account inventory; shadow root accounts bypass auditing because logs key off the username while privileges key off the UID. Attackers create such accounts to persist through password rotations on the canonical root.",
+    "why": "UID 0 is the kernel's superuser \u2014 any account assigned UID 0 is root, regardless of name. NIST 800-53 AC-2 requires authoritative account inventory; shadow root accounts bypass auditing because logs key off the username while privileges key off the UID. Attackers create such accounts to persist through password rotations on the canonical root.",
     "fix": "sudo usermod -u <new-uid> <username>  # assign a non-zero UID, or remove the account: sudo userdel <username>"
   },
   "AC-3-openclaw-dir-perm": {
-    "family": "AC-3 — Access Enforcement",
+    "family": "AC-3 \u2014 Access Enforcement",
     "what": "~/.openclaw directory permissions are not 700",
     "expected": "700 (owner-only)",
-    "why": "The ~/.openclaw directory holds workspace state, agent memory, and credential paths used by OpenClaw subprocesses. NIST 800-53 AC-3 requires enforcement of approved access — group/world-readable workspace directories let other local users enumerate which agents and accounts the operator runs. Even read access leaks operational intent.",
+    "why": "The ~/.openclaw directory holds workspace state, agent memory, and credential paths used by OpenClaw subprocesses. NIST 800-53 AC-3 requires enforcement of approved access \u2014 group/world-readable workspace directories let other local users enumerate which agents and accounts the operator runs. Even read access leaks operational intent.",
     "fix": "chmod 700 ~/.openclaw",
     "scope": "agent"
   },
   "AC-3-secrets-dir-perm": {
-    "family": "AC-3 — Access Enforcement",
+    "family": "AC-3 \u2014 Access Enforcement",
     "what": "~/.openclaw/secrets directory permissions are not 700",
     "expected": "700 (owner-only)",
-    "why": "Group/world-readable secrets directory exposes OAuth tokens and API keys cached by OpenClaw to other local users or processes. NIST 800-53 AC-3 requires access enforcement that limits sensitive resources to authorized identities. Any unprivileged local process — including a compromised browser or editor — can read tokens and impersonate the operator against external services.",
+    "why": "Group/world-readable secrets directory exposes OAuth tokens and API keys cached by OpenClaw to other local users or processes. NIST 800-53 AC-3 requires access enforcement that limits sensitive resources to authorized identities. Any unprivileged local process \u2014 including a compromised browser or editor \u2014 can read tokens and impersonate the operator against external services.",
     "fix": "chmod 700 ~/.openclaw/secrets",
     "scope": "agent"
   },
   "AC-3-secret-file-perm": {
-    "family": "AC-3 — Access Enforcement",
+    "family": "AC-3 \u2014 Access Enforcement",
     "what": "Individual secret file under ~/.openclaw/secrets is not 600",
     "expected": "600 (owner read/write only)",
     "why": "Even if the parent directory is locked down, lax file modes on individual tokens allow exfiltration via backup, sync, or container bind-mount. NIST 800-53 AC-3 requires per-resource access enforcement, not just directory-level. A 644 token survives a tarball or rsync that preserves modes but loses parent-dir context.",
@@ -51,160 +51,160 @@
     "scope": "agent"
   },
   "AC-6-passwordless-sudo": {
-    "family": "AC-6 — Least Privilege",
+    "family": "AC-6 \u2014 Least Privilege",
     "what": "Current user has passwordless sudo (NOPASSWD) enabled",
     "expected": "sudo requires a password (no NOPASSWD for this user)",
-    "why": "Passwordless sudo turns any code execution as the user — a malicious script, a hijacked editor plugin, a curl|bash mistake — into immediate root. NIST 800-53 AC-6 requires least privilege, including the principle that elevation must require an explicit re-authentication. Cron and CI runners sometimes need NOPASSWD for narrow commands; an interactive operator account should not.",
+    "why": "Passwordless sudo turns any code execution as the user \u2014 a malicious script, a hijacked editor plugin, a curl|bash mistake \u2014 into immediate root. NIST 800-53 AC-6 requires least privilege, including the principle that elevation must require an explicit re-authentication. Cron and CI runners sometimes need NOPASSWD for narrow commands; an interactive operator account should not.",
     "fix": "Edit /etc/sudoers.d/ entries with 'sudo visudo' and remove NOPASSWD: from the operator user, or scope it to specific commands."
   },
   "AC-6-user-in-sudo-group": {
-    "family": "AC-6 — Least Privilege",
+    "family": "AC-6 \u2014 Least Privilege",
     "what": "Current user is a member of the 'sudo' group",
     "expected": "Service/operator accounts that don't need elevation should not be in 'sudo'",
     "why": "Membership in 'sudo' confers blanket root capability subject only to password challenge. NIST 800-53 AC-6 calls for separation of duties between operational and administrative accounts. If this account runs OpenClaw, agents, or daemons day-to-day, a compromise of the agent shell becomes a compromise of root.",
     "fix": "If a separate admin account exists: sudo deluser <username> sudo  # otherwise create a dedicated admin account first"
   },
   "AC-17-ufw-inactive": {
-    "family": "AC-17 — Remote Access",
+    "family": "AC-17 \u2014 Remote Access",
     "what": "Host firewall is not active",
     "expected": {
       "default": "UFW reports 'Status: active'",
       "macos": "Application Firewall reports globalstate = 1"
     },
-    "why": "Without an active host firewall, any service that binds to an external interface is reachable from the network. NIST 800-53 AC-17 requires controls on remote access paths. An inactive firewall means the host depends entirely on perimeter or upstream protection — fine in some deployments, but invisible drift if you assumed the firewall was enforcing.",
+    "why": "Without an active host firewall, any service that binds to an external interface is reachable from the network. NIST 800-53 AC-17 requires controls on remote access paths. An inactive firewall means the host depends entirely on perimeter or upstream protection \u2014 fine in some deployments, but invisible drift if you assumed the firewall was enforcing.",
     "fix": {
       "default": "sudo ufw enable  # review rules first with: sudo ufw status verbose",
       "macos": "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on"
     }
   },
   "AC-17-ufw-not-installed": {
-    "family": "AC-17 — Remote Access",
+    "family": "AC-17 \u2014 Remote Access",
     "what": "No recognized host firewall is installed",
     "expected": {
       "default": "UFW or another host firewall (nftables, firewalld) is in place",
       "macos": "Application Firewall is available (built-in on macOS)"
     },
-    "why": "Without a recognized host firewall, host-level network access enforcement is unverified. NIST 800-53 AC-17 requires documented controls on remote access. If you use an alternative firewall or rely on a cloud security group, that's fine — but Sarge cannot confirm it, so this is flagged as a gap until you enable the firewall or document the alternative.",
+    "why": "Without a recognized host firewall, host-level network access enforcement is unverified. NIST 800-53 AC-17 requires documented controls on remote access. If you use an alternative firewall or rely on a cloud security group, that's fine \u2014 but Sarge cannot confirm it, so this is flagged as a gap until you enable the firewall or document the alternative.",
     "fix": {
       "default": "sudo apt install ufw && sudo ufw enable  # or document the alternative firewall in baseline/",
       "macos": "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on"
     }
   },
   "AC-17-external-ports": {
-    "family": "AC-17 — Remote Access",
+    "family": "AC-17 \u2014 Remote Access",
     "what": "Externally-listening TCP ports detected (not bound to loopback)",
     "expected": "Only intentionally-exposed services listen on non-loopback addresses",
-    "why": "Every externally-bound port is an attack surface. NIST 800-53 AC-17 requires that remote access points be authorized, monitored, and protected. Many drift incidents start with a service the operator forgot was exposed — a debug port, a leftover dev container, a default-config Postgres.",
+    "why": "Every externally-bound port is an attack surface. NIST 800-53 AC-17 requires that remote access points be authorized, monitored, and protected. Many drift incidents start with a service the operator forgot was exposed \u2014 a debug port, a leftover dev container, a default-config Postgres.",
     "fix": "Review the listed ports with 'ss -tlnp' and either bind to 127.0.0.1, firewall the port, or document it as an intended remote service."
   },
   "AU-2-auditd-not-running": {
-    "family": "AU-2 — Audit Events",
+    "family": "AU-2 \u2014 Audit Events",
     "what": "Audit daemon is not running",
     "expected": "Audit daemon is active and persisting events",
     "why": "Without the audit daemon, security-relevant kernel and file events aren't recorded, so post-incident forensics rely entirely on application logs and the system journal (which can be tampered with by root). NIST 800-53 AU-2 requires the system to generate audit records for defined events; the audit daemon is the standard Linux mechanism. No audit daemon = no defensible timeline.",
     "fix": "sudo apt install auditd && sudo systemctl enable --now auditd"
   },
   "AU-2-journald-inactive": {
-    "family": "AU-2 — Audit Events",
+    "family": "AU-2 \u2014 Audit Events",
     "what": "systemd-journald is not active",
     "expected": "systemd-journald running, or syslog explicitly configured as substitute",
     "why": "journald collects logs from systemd units and the kernel; without it (or syslog), service logs are lost between restarts. NIST 800-53 AU-2 requires consistent audit event capture. A host with no journald and no syslog has no audit trail for daemon failures or security warnings.",
     "fix": "sudo systemctl enable --now systemd-journald  # or verify rsyslog/syslog-ng is configured"
   },
   "AU-2-journal-not-persisted": {
-    "family": "AU-2 — Audit Events",
+    "family": "AU-2 \u2014 Audit Events",
     "what": "journald appears to not be persisting logs to disk",
     "expected": "Storage=persistent in /etc/systemd/journald.conf",
     "why": "When journald runs in volatile (RAM-only) mode, all logs vanish on reboot. NIST 800-53 AU-2 expects audit records to survive long enough to support incident response. A reboot during an attack erases the evidence.",
     "fix": "sudo sed -i 's/^#\\?Storage=.*/Storage=persistent/' /etc/systemd/journald.conf && sudo systemctl restart systemd-journald"
   },
   "AU-9-audit-log-bad-owner": {
-    "family": "AU-9 — Protection of Audit Information",
+    "family": "AU-9 \u2014 Protection of Audit Information",
     "what": "/var/log/audit/audit.log is not owned by root",
     "expected": "Owner is root",
     "why": "Audit logs owned by a non-root user can be tampered with by that user, defeating non-repudiation. NIST 800-53 AU-9 requires audit information to be protected from unauthorized modification. If the log owner can write to it, the audit trail can be edited to hide actions.",
     "fix": "sudo chown root:root /var/log/audit/audit.log"
   },
   "AU-9-audit-log-perm": {
-    "family": "AU-9 — Protection of Audit Information",
+    "family": "AU-9 \u2014 Protection of Audit Information",
     "what": "/var/log/audit/audit.log permissions are not 600",
     "expected": "600",
     "why": "World/group-readable audit logs leak sensitive event metadata (commands run, files accessed, user activity) to any local account. NIST 800-53 AU-9 requires that audit information be protected from unauthorized read as well as write. This is also a covert-channel risk: a low-privilege process can fingerprint admin behaviour.",
     "fix": "sudo chmod 600 /var/log/audit/audit.log"
   },
   "AU-9-audit-log-missing": {
-    "family": "AU-9 — Protection of Audit Information",
+    "family": "AU-9 \u2014 Protection of Audit Information",
     "what": "Audit daemon is running but /var/log/audit/audit.log does not exist",
     "expected": "Audit log present at the configured location",
-    "why": "The audit daemon is running but no log file exists at the standard path — likely a misconfiguration in the audit daemon config, or audit events being routed elsewhere. NIST 800-53 AU-9 cannot be enforced if the audit sink is unknown. This is a silent-failure mode where operators believe they have audit coverage but don't.",
+    "why": "The audit daemon is running but no log file exists at the standard path \u2014 likely a misconfiguration in the audit daemon config, or audit events being routed elsewhere. NIST 800-53 AU-9 cannot be enforced if the audit sink is unknown. This is a silent-failure mode where operators believe they have audit coverage but don't.",
     "fix": "Check 'log_file' in /etc/audit/auditd.conf and review with: sudo aureport -t"
   },
   "AU-12-no-openclaw-rules": {
-    "family": "AU-12 — Audit Generation",
+    "family": "AU-12 \u2014 Audit Generation",
     "what": "No audit rules cover ~/.openclaw/secrets",
     "expected": "auditctl -l shows watch rules for the secrets directory",
-    "why": "Without watch rules, reads/writes to high-value secret material are not recorded. NIST 800-53 AU-12 requires that audit records be generated for defined auditable events — for sarge's threat model, OpenClaw secret access is one of those events. Detecting credential exfiltration after the fact requires this trail.",
+    "why": "Without watch rules, reads/writes to high-value secret material are not recorded. NIST 800-53 AU-12 requires that audit records be generated for defined auditable events \u2014 for sarge's threat model, OpenClaw secret access is one of those events. Detecting credential exfiltration after the fact requires this trail.",
     "fix": "Run: scripts/harden-auditd.sh  # or add: sudo auditctl -w ~/.openclaw/secrets -p rwxa -k openclaw-secrets",
     "scope": "agent"
   },
   "AU-12-no-auth-rules": {
-    "family": "AU-12 — Audit Generation",
+    "family": "AU-12 \u2014 Audit Generation",
     "what": "No audit rules cover /etc/passwd, /etc/shadow, or /etc/sudoers",
     "expected": "Watch rules on the auth-critical files",
     "why": "These files define who can log in and who can elevate. NIST 800-53 AU-12 expects audit generation for changes to authentication and authorization data. Unmonitored writes to /etc/sudoers are a classic persistence vector.",
     "fix": "sudo auditctl -w /etc/passwd -p wa -k identity && sudo auditctl -w /etc/shadow -p wa -k identity && sudo auditctl -w /etc/sudoers -p wa -k identity"
   },
   "CM-2-no-baseline": {
-    "family": "CM-2 — Baseline Configuration",
+    "family": "CM-2 \u2014 Baseline Configuration",
     "what": "Sarge baseline file (baseline/openclaw.json.baseline) not found",
     "expected": "Baseline file present in repo to anchor drift detection",
     "why": "Without a documented baseline, every change looks new and there's no anchor for what 'good' looks like. NIST 800-53 CM-2 requires maintaining a current baseline configuration of the information system. For sarge specifically, the baseline file is what subsequent runs compare against to detect drift in the OpenClaw layout.",
     "fix": "Restore baseline/openclaw.json.baseline from the sarge repo, or regenerate from a known-good host."
   },
   "CM-6-unattended-not-installed": {
-    "family": "CM-6 — Configuration Settings",
+    "family": "CM-6 \u2014 Configuration Settings",
     "what": "unattended-upgrades package is not installed",
     "expected": "unattended-upgrades installed and configured for security updates",
     "why": "Without unattended-upgrades, security patches require manual intervention and tend to lag. NIST 800-53 CM-6 (and SI-2 / Flaw Remediation) require timely application of vendor-released fixes. Background auto-patching narrows the window between disclosure and exploitation.",
     "fix": "sudo apt install unattended-upgrades && sudo dpkg-reconfigure -plow unattended-upgrades"
   },
   "CM-6-unattended-not-configured": {
-    "family": "CM-6 — Configuration Settings",
+    "family": "CM-6 \u2014 Configuration Settings",
     "what": "unattended-upgrades is installed but the auto-reboot setting in 50unattended-upgrades is not configured",
     "expected": "Unattended-Upgrade::Automatic-Reboot directive present",
-    "why": "Installed-but-unconfigured leaves you believing patches are applied when in fact the policy file is incomplete. NIST 800-53 CM-6 requires documented and enforced configuration. Verify the file contents match your maintenance window — kernel updates without auto-reboot still leave the host on the old vulnerable kernel.",
+    "why": "Installed-but-unconfigured leaves you believing patches are applied when in fact the policy file is incomplete. NIST 800-53 CM-6 requires documented and enforced configuration. Verify the file contents match your maintenance window \u2014 kernel updates without auto-reboot still leave the host on the old vulnerable kernel.",
     "fix": "Edit /etc/apt/apt.conf.d/50unattended-upgrades and confirm Automatic-Reboot, Allowed-Origins, and email settings match policy."
   },
   "CM-6-pending-updates-low": {
-    "family": "CM-6 — Configuration Settings",
+    "family": "CM-6 \u2014 Configuration Settings",
     "what": "Small number of package updates pending (1-5)",
     "expected": "Apply pending updates within the maintenance window",
     "why": "A small backlog is normal but should not be allowed to grow. NIST 800-53 CM-6 / SI-2 require tracking and applying configuration and security updates. Catching this at single-digit count keeps the apply-and-test cycle cheap.",
     "fix": "sudo apt update && sudo apt upgrade  # review first with: apt list --upgradable"
   },
   "CM-6-pending-updates-high": {
-    "family": "CM-6 — Configuration Settings",
+    "family": "CM-6 \u2014 Configuration Settings",
     "what": "More than 5 package updates pending",
     "expected": "Apply security updates immediately",
     "why": "A large patch backlog usually means the host has missed at least one security advisory cycle. NIST 800-53 CM-6 / SI-2 require timely flaw remediation. Each unpatched package multiplies the chance that a published CVE is exploitable on this host.",
     "fix": "sudo apt update && sudo apt upgrade  # for security-only: sudo unattended-upgrade -d"
   },
   "CM-7-risky-service-running": {
-    "family": "CM-7 — Least Functionality",
+    "family": "CM-7 \u2014 Least Functionality",
     "what": "A service from the deny-list is currently running (telnet, rsh, rlogin, vsftpd, pure-ftpd, proftpd, xinetd, cups, avahi-daemon)",
     "expected": "Service stopped and disabled if not explicitly required",
     "why": "These services are commonly enabled by default but rarely needed on a server, and several (telnet, rsh, rlogin, plain FTP) transmit credentials in clear. NIST 800-53 CM-7 requires the system be configured to provide only essential capabilities. Each unused listener is an attack surface for no functional gain.",
     "fix": "sudo systemctl disable --now <service>  # confirm with whoever owns the host first"
   },
   "CM-7-risky-service-enabled": {
-    "family": "CM-7 — Least Functionality",
+    "family": "CM-7 \u2014 Least Functionality",
     "what": "A risky service is enabled (will start at boot) even though not currently running",
     "expected": "Service disabled if not explicitly required",
-    "why": "An enabled-but-stopped service is one reboot or one operator mistake away from active. NIST 800-53 CM-7 requires removing or disabling unused capabilities — leaving them enabled defers the risk rather than removing it. This is a common 'I'll fix it later' state that quietly persists.",
+    "why": "An enabled-but-stopped service is one reboot or one operator mistake away from active. NIST 800-53 CM-7 requires removing or disabling unused capabilities \u2014 leaving them enabled defers the risk rather than removing it. This is a common 'I'll fix it later' state that quietly persists.",
     "fix": "sudo systemctl disable <service>  # and consider: sudo apt purge <package>"
   },
   "CM-7-ssh-permit-root": {
-    "family": "CM-7 — Least Functionality",
+    "family": "CM-7 \u2014 Least Functionality",
     "what": "SSH PermitRootLogin is not 'no' or 'prohibit-password'",
     "expected": "PermitRootLogin no  (or prohibit-password if key-only root is required)",
     "why": "Direct root SSH login means a single compromised credential or key is full system takeover, with no audit trail tying actions to a human operator. NIST 800-53 CM-7 (least functionality) and AC-6 (least privilege) both argue for forcing operators to log in as themselves and elevate via sudo. This also breaks brute-force attempts since 'root' is the universal target username.",
@@ -214,7 +214,7 @@
     }
   },
   "CM-7-ssh-password-auth": {
-    "family": "CM-7 — Least Functionality",
+    "family": "CM-7 \u2014 Least Functionality",
     "what": "SSH PasswordAuthentication is not explicitly disabled",
     "expected": "PasswordAuthentication no  (key-based auth only)",
     "why": "Password-based SSH is vulnerable to brute force and credential stuffing in a way key-based auth is not. NIST 800-53 CM-7 plus IA-2 (identification & authentication) favor cryptographic authenticators over reusable passwords for remote access. Once you've migrated all operators to keys, this should be locked down.",
@@ -224,84 +224,84 @@
     }
   },
   "IA-5-pass-max-days": {
-    "family": "IA-5 — Authenticator Management",
+    "family": "IA-5 \u2014 Authenticator Management",
     "what": "PASS_MAX_DAYS in /etc/login.defs is unset or greater than 90",
     "expected": "PASS_MAX_DAYS <= 90",
     "why": "Without password-age caps, compromised credentials remain valid indefinitely. NIST 800-53 IA-5 requires periodic authenticator refresh. While modern guidance debates rotation frequency for human users, server policy still typically enforces a ceiling so that abandoned accounts can't accumulate stale, breached credentials.",
     "fix": "sudo sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\\t90/' /etc/login.defs"
   },
   "IA-5-pass-min-days": {
-    "family": "IA-5 — Authenticator Management",
+    "family": "IA-5 \u2014 Authenticator Management",
     "what": "PASS_MIN_DAYS in /etc/login.defs is unset or 0",
     "expected": "PASS_MIN_DAYS >= 1",
     "why": "PASS_MIN_DAYS=0 lets a user immediately rotate back to a previous password, defeating any history-based reuse policy. NIST 800-53 IA-5 expects password change controls to actually take effect. A non-zero minimum prevents the trivial 'change-then-change-back' bypass.",
     "fix": "sudo sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS\\t1/' /etc/login.defs"
   },
   "IA-5-pass-warn-age": {
-    "family": "IA-5 — Authenticator Management",
+    "family": "IA-5 \u2014 Authenticator Management",
     "what": "PASS_WARN_AGE in /etc/login.defs is unset or below 7",
     "expected": "PASS_WARN_AGE >= 7",
     "why": "Without an expiry warning window, users are surprised by lockout and tend to pick low-effort replacement passwords under time pressure. NIST 800-53 IA-5 supports operationally workable authenticator management. A week of warning lets users plan a real password rotation.",
     "fix": "sudo sed -i 's/^PASS_WARN_AGE.*/PASS_WARN_AGE\\t7/' /etc/login.defs"
   },
   "IA-5-pwquality-minlen": {
-    "family": "IA-5 — Authenticator Management",
+    "family": "IA-5 \u2014 Authenticator Management",
     "what": "pwquality minlen is unset or below 12",
     "expected": "minlen >= 12",
     "why": "Short passwords are within reach of offline cracking against any leaked hash. NIST 800-53 IA-5 requires authenticators of sufficient strength for the protected resource. 12 characters is the contemporary floor for password complexity guidance against modern GPU-assisted cracking.",
     "fix": "Edit /etc/security/pwquality.conf and set: minlen = 12"
   },
   "IA-5-pwquality-credit": {
-    "family": "IA-5 — Authenticator Management",
+    "family": "IA-5 \u2014 Authenticator Management",
     "what": "pwquality character-class credits (dcredit/ucredit/ocredit/lcredit) not set",
     "expected": "Credits configured to require character-class diversity",
-    "why": "Without character-class credits, pwquality only enforces length — users may pick all-lowercase strings. NIST 800-53 IA-5 calls for authenticator complexity appropriate to the threat. Class credits force at least some diversity even when minlen alone would pass.",
+    "why": "Without character-class credits, pwquality only enforces length \u2014 users may pick all-lowercase strings. NIST 800-53 IA-5 calls for authenticator complexity appropriate to the threat. Class credits force at least some diversity even when minlen alone would pass.",
     "fix": "Edit /etc/security/pwquality.conf and add: dcredit = -1, ucredit = -1, ocredit = -1, lcredit = -1"
   },
   "IA-5-pwquality-missing": {
-    "family": "IA-5 — Authenticator Management",
+    "family": "IA-5 \u2014 Authenticator Management",
     "what": "/etc/security/pwquality.conf does not exist",
     "expected": "libpam-pwquality installed and configured",
     "why": "No pwquality means no enforced complexity, length, or dictionary checks at password-set time. NIST 800-53 IA-5 requires authenticator strength enforcement at the point of creation, not just at the point of use. Without pwquality, weak passwords get accepted and only get caught later (if ever) by a breach.",
     "fix": "sudo apt install libpam-pwquality  # then configure /etc/security/pwquality.conf"
   },
   "IA-2-faillock-not-configured": {
-    "family": "IA-2 — Identification and Authentication",
+    "family": "IA-2 \u2014 Identification and Authentication",
     "what": "pam_faillock is not configured in /etc/pam.d/common-auth",
     "expected": "pam_faillock entries present in PAM auth stack",
     "why": "Without account-lockout, brute-force attempts can run unbounded against console and SSH password logins. NIST 800-53 IA-2 expects the system to limit consecutive invalid login attempts. faillock is the standard Linux mechanism; without it, defense relies entirely on fail2ban or upstream rate limiting.",
     "fix": "sudo pam-auth-update --enable faillock  # then review /etc/security/faillock.conf"
   },
   "IA-2-faillock-deny": {
-    "family": "IA-2 — Identification and Authentication",
+    "family": "IA-2 \u2014 Identification and Authentication",
     "what": "faillock deny threshold is unset or above 5",
     "expected": "deny <= 5 attempts",
     "why": "A high deny threshold allows many guesses before lockout, undermining the brute-force protection. NIST 800-53 IA-2 expects login-attempt limits sized to deter automated guessing. Five is a common balance between operator typos and attacker scripts.",
     "fix": "Edit /etc/security/faillock.conf and set: deny = 5"
   },
   "IA-2-faillock-unlock-time": {
-    "family": "IA-2 — Identification and Authentication",
+    "family": "IA-2 \u2014 Identification and Authentication",
     "what": "faillock unlock_time is unset or below 1800 seconds",
     "expected": "unlock_time >= 1800 (30 min)",
     "why": "Short unlock windows let an attacker resume guessing minutes later, drastically extending the effective attempt budget. NIST 800-53 IA-2 expects lockout durations long enough to actually slow brute force. 30 minutes per lock keeps attacker throughput negligible while remaining recoverable for legitimate operator typos.",
     "fix": "Edit /etc/security/faillock.conf and set: unlock_time = 1800"
   },
   "IA-2-faillock-conf-missing": {
-    "family": "IA-2 — Identification and Authentication",
+    "family": "IA-2 \u2014 Identification and Authentication",
     "what": "pam_faillock referenced in PAM stack but /etc/security/faillock.conf is missing",
     "expected": "faillock.conf present with documented thresholds",
-    "why": "Without the conf file, faillock falls back to compiled defaults — defaults that vary across distributions and are hard to audit. NIST 800-53 IA-2 expects authenticator behavior to be documented and enforced. Drop the conf in place to make policy explicit.",
+    "why": "Without the conf file, faillock falls back to compiled defaults \u2014 defaults that vary across distributions and are hard to audit. NIST 800-53 IA-2 expects authenticator behavior to be documented and enforced. Drop the conf in place to make policy explicit.",
     "fix": "sudo cp /usr/share/doc/libpam-modules/examples/faillock.conf /etc/security/faillock.conf  # or create from scratch with deny= and unlock_time= entries"
   },
   "IA-2-tmout-unset": {
-    "family": "IA-2 — Identification and Authentication",
+    "family": "IA-2 \u2014 Identification and Authentication",
     "what": "TMOUT shell timeout not configured in /etc/profile or /etc/profile.d/",
     "expected": "TMOUT set (recommend 900 seconds)",
-    "why": "Idle interactive sessions left logged in are a session-hijacking risk if the operator walks away. NIST 800-53 IA-2 (specifically IA-2(8) — session lock) calls for terminating or locking sessions after a defined inactivity period. TMOUT is the bash-level mechanism; it complements display-locker policies for unattended terminals.",
+    "why": "Idle interactive sessions left logged in are a session-hijacking risk if the operator walks away. NIST 800-53 IA-2 (specifically IA-2(8) \u2014 session lock) calls for terminating or locking sessions after a defined inactivity period. TMOUT is the bash-level mechanism; it complements display-locker policies for unattended terminals.",
     "fix": "echo 'TMOUT=900' | sudo tee /etc/profile.d/tmout.sh && sudo chmod 644 /etc/profile.d/tmout.sh"
   },
   "SC-8-cloudflared-not-detected": {
-    "family": "SC-8 — Transmission Confidentiality",
+    "family": "SC-8 \u2014 Transmission Confidentiality",
     "what": "OpenClaw gateway is listening but cloudflared is not running",
     "expected": "cloudflared running (Cloudflare Tunnel TLS termination) or TLS configured directly on the gateway",
     "why": "Without TLS termination, gateway traffic is unencrypted on the wire, exposing tokens and agent payloads. NIST 800-53 SC-8 requires confidentiality of transmitted information. The OpenClaw deployment pattern relies on Cloudflare Tunnel for TLS; if cloudflared isn't running, either the tunnel is down or the gateway is exposed without TLS.",
@@ -309,7 +309,7 @@
     "scope": "agent"
   },
   "SC-28-config-perm": {
-    "family": "SC-28 — Protection of Information at Rest",
+    "family": "SC-28 \u2014 Protection of Information at Rest",
     "what": "OpenClaw runtime config (~/.openclaw/openclaw.json, or legacy ~/.openclaw/config.json) permissions are not 600 or 400",
     "expected": "600 (or 400 if read-only is sufficient)",
     "why": "The OpenClaw config file holds connection details and inline credentials for the runtime (provider tokens, MCP creds, delivery secrets). NIST 800-53 SC-28 requires protection of information at rest. World/group-readable config gives any local process a roadmap of services and their auth material.",
@@ -317,7 +317,7 @@
     "scope": "agent"
   },
   "SC-28-config-owner": {
-    "family": "SC-28 — Protection of Information at Rest",
+    "family": "SC-28 \u2014 Protection of Information at Rest",
     "what": "OpenClaw runtime config (~/.openclaw/openclaw.json, or legacy ~/.openclaw/config.json) is owned by an unexpected user",
     "expected": "Owned by the current operator/service user",
     "why": "Wrong ownership often means the file was created by a different account (root via sudo, an installer, or a previous user) and may have unexpected permission semantics. NIST 800-53 SC-28 + AC-3 require explicit ownership of sensitive resources. Sort out who is supposed to own the config and align permissions.",
@@ -325,7 +325,7 @@
     "scope": "agent"
   },
   "SC-28-world-readable-secrets": {
-    "family": "SC-28 — Protection of Information at Rest",
+    "family": "SC-28 \u2014 Protection of Information at Rest",
     "what": "World-readable sensitive files found inside ~/.openclaw (config, secrets/, credentials/, auth/, or credential-shaped filenames)",
     "expected": "No files matching Sarge's known-sensitive allowlist under ~/.openclaw are world-readable (mode bit o+r unset)",
     "why": "World-readable credential material in the OpenClaw workspace exposes provider tokens, MCP credentials, and cached auth to any local user. NIST 800-53 SC-28 requires confidentiality at rest. The check is scoped to known-sensitive paths so intentionally-readable workspace canon (SOUL.md, USER.md, AGENTS.md, etc.) does not create false positives that would drown the real signal.",
@@ -333,52 +333,52 @@
     "scope": "agent"
   },
   "SI-2-security-updates-low": {
-    "family": "SI-2 — Flaw Remediation",
+    "family": "SI-2 \u2014 Flaw Remediation",
     "what": "1-3 security updates pending",
     "expected": "Apply security updates within the maintenance window",
     "why": "Even a small number of pending security updates represents known-exploitable surface. NIST 800-53 SI-2 requires the organization to identify, report, and correct flaws in a timely manner. Catching this early keeps the apply-and-test cost low.",
     "fix": "sudo unattended-upgrade -d  # or: sudo apt upgrade  # for security-only the unattended path is preferred"
   },
   "SI-2-security-updates-high": {
-    "family": "SI-2 — Flaw Remediation",
+    "family": "SI-2 \u2014 Flaw Remediation",
     "what": "More than 3 security updates pending",
     "expected": "Apply security updates immediately",
-    "why": "A large security backlog means the host has likely missed at least one published advisory cycle. NIST 800-53 SI-2 requires timely flaw remediation; this is the canonical metric. Schedule the patch window now — every additional day extends the exposure to publicly known vulnerabilities.",
+    "why": "A large security backlog means the host has likely missed at least one published advisory cycle. NIST 800-53 SI-2 requires timely flaw remediation; this is the canonical metric. Schedule the patch window now \u2014 every additional day extends the exposure to publicly known vulnerabilities.",
     "fix": "sudo apt update && sudo unattended-upgrade -d  # follow with: sudo reboot if kernel updates were included"
   },
   "SI-3-clamav-not-installed": {
-    "family": "SI-3 — Malicious Code Protection",
+    "family": "SI-3 \u2014 Malicious Code Protection",
     "what": "ClamAV is not installed",
     "expected": "ClamAV (or another endpoint malware scanner) installed",
     "why": "Without an on-host malware scanner, attached files (downloads, email attachments, agent inputs) are unscreened. NIST 800-53 SI-3 requires malicious code protection. ClamAV is the conventional Linux choice; alternatives are acceptable but Sarge can only attest to ClamAV today.",
     "fix": "sudo apt install clamav clamav-daemon clamav-freshclam"
   },
   "SI-3-clamav-daemon-stopped": {
-    "family": "SI-3 — Malicious Code Protection",
+    "family": "SI-3 \u2014 Malicious Code Protection",
     "what": "ClamAV is installed but clamav-daemon is not running",
     "expected": "clamav-daemon active for on-access scanning",
     "why": "An installed-but-stopped scanner provides no protection. NIST 800-53 SI-3 requires the protection mechanism to actually run. The daemon enables on-access scanning rather than only scheduled batch scans.",
     "fix": "sudo systemctl enable --now clamav-daemon"
   },
   "SI-3-freshclam-stopped": {
-    "family": "SI-3 — Malicious Code Protection",
+    "family": "SI-3 \u2014 Malicious Code Protection",
     "what": "ClamAV signature updater (freshclam) is not running",
     "expected": "clamav-freshclam active to keep signatures current",
     "why": "ClamAV with stale signatures will miss everything published after the last update. NIST 800-53 SI-3 requires malicious code protection mechanisms to be kept current. freshclam handles automatic signature refresh; without it, your scanner ages out of usefulness within days.",
     "fix": "sudo systemctl enable --now clamav-freshclam"
   },
   "SI-3-fail2ban-not-running": {
-    "family": "SI-3 — Malicious Code Protection (extended: brute-force)",
+    "family": "SI-3 \u2014 Malicious Code Protection (extended: brute-force)",
     "what": "fail2ban is not running",
     "expected": "fail2ban active with appropriate jails (sshd, etc.)",
     "why": "fail2ban is the host-side rate-limiter for SSH and other auth daemons; without it, brute-force attempts run as fast as the network allows. NIST 800-53 SI-3 (and IA-2) expect controls against automated credential attacks. fail2ban complements faillock by acting at the network/process layer rather than only at PAM.",
     "fix": "sudo apt install fail2ban && sudo systemctl enable --now fail2ban  # or run scripts/harden-fail2ban.sh"
   },
   "SI-7-checksum-mismatch": {
-    "family": "SI-7 — Software, Firmware, and Information Integrity",
+    "family": "SI-7 \u2014 Software, Firmware, and Information Integrity",
     "what": "Sarge script checksum verification FAILED",
     "expected": "All files listed in CHECKSUMS.sha256 match their recorded hashes",
-    "why": "A checksum mismatch means a sarge script has been modified since the checksum was recorded — either an authorized update (in which case the checksum file is stale) or unauthorized tampering. NIST 800-53 SI-7 requires integrity verification of system software. Sarge is itself a security tool; tampering with it could mute the very findings it should report.",
+    "why": "A checksum mismatch means a sarge script has been modified since the checksum was recorded \u2014 either an authorized update (in which case the checksum file is stale) or unauthorized tampering. NIST 800-53 SI-7 requires integrity verification of system software. Sarge is itself a security tool; tampering with it could mute the very findings it should report.",
     "fix": "Re-clone the sarge repo from a trusted source, or if the change was intentional: regenerate checksums with: sha256sum scripts/*.sh assessment/**/*.sh > CHECKSUMS.sha256"
   },
   "WIN-AC-3-workspace-acl": {
@@ -717,49 +717,48 @@
     "fix": "Not applicable - informational only. Inspect policy-inventory.json in the run folder for the captured settings.",
     "severity": "info"
   },
-
   "AS-1-tool-gate-installed": {
-    "family": "AS-1 — Tool-Gate Hook Installation (Sarge/OpenClaw overlay; maps to AC-3, AC-6)",
+    "family": "AS-1 \u2014 Tool-Gate Hook Installation (Sarge/OpenClaw overlay; maps to AC-3, AC-6)",
     "what": "tool-gate.py + taint-record.py missing from ~/.claude/hooks/, or hook files present but not referenced from ~/.claude/settings.json",
     "expected": "Both hook files present, executable, AND referenced from hooks.PreToolUse (tool-gate.py) / hooks.PostToolUse (taint-record.py) in ~/.claude/settings.json",
-    "why": "Tool-gate is the OpenClaw enforcement point for AC-3 (access enforcement — blocks privileged writes driven by untrusted input) and AC-6 (least privilege — origin-scoped tool routing). A hook file that isn't wired into settings never fires; a settings entry pointing at a missing file crashes the runtime. Either state removes the enforcement layer without any indication in normal operation.",
+    "why": "Tool-gate is the OpenClaw enforcement point for AC-3 (access enforcement \u2014 blocks privileged writes driven by untrusted input) and AC-6 (least privilege \u2014 origin-scoped tool routing). A hook file that isn't wired into settings never fires; a settings entry pointing at a missing file crashes the runtime. Either state removes the enforcement layer without any indication in normal operation.",
     "fix": "Reinstall tool-gate: cp /home/oscar/openclaw/security/tool-gate/tool-gate.py /home/oscar/openclaw/security/tool-gate/taint-record.py /home/oscar/openclaw/security/tool-gate/gate_common.py ~/.claude/hooks/  && verify ~/.claude/settings.json contains hooks.PreToolUse -> tool-gate.py and hooks.PostToolUse -> taint-record.py",
     "scope": "agent"
   },
   "AS-2-gate-mode": {
-    "family": "AS-2 — Tool-Gate Enforcement Mode (Sarge/OpenClaw overlay; maps to AC-3, CM-6)",
+    "family": "AS-2 \u2014 Tool-Gate Enforcement Mode (Sarge/OpenClaw overlay; maps to AC-3, CM-6)",
     "what": "~/.config/o6-gate-mode is missing, is 'shadow' (log-only), or contains an unknown value",
     "expected": "'tier-c' (block Tier-C actions) or 'tier-bc' (block Tier-B and Tier-C). 'shadow' is acceptable during initial rollout only.",
-    "why": "The mode file is the single source of truth for whether tool-gate enforces or merely observes. Missing = no explicit mode (dangerous — a caller may assume enforcement is on); 'shadow' = decisions logged but nothing blocked. Both leave the AC-3 enforcement claim without a control behind it.",
+    "why": "The mode file is the single source of truth for whether tool-gate enforces or merely observes. Missing = no explicit mode (dangerous \u2014 a caller may assume enforcement is on); 'shadow' = decisions logged but nothing blocked. Both leave the AC-3 enforcement claim without a control behind it.",
     "fix": "echo 'tier-c' > ~/.config/o6-gate-mode  # or 'tier-bc' for stricter enforcement once you've had a clean shadow-mode window",
     "scope": "agent"
   },
   "AS-3-decisions-ledger-perm": {
-    "family": "AS-3 — Tool-Gate Decisions Ledger (Sarge/OpenClaw overlay; maps to AU-2, AU-9)",
+    "family": "AS-3 \u2014 Tool-Gate Decisions Ledger (Sarge/OpenClaw overlay; maps to AU-2, AU-9)",
     "what": "~/.openclaw/state/tool-gate/decisions.jsonl missing, or permissions are not 600/400",
     "expected": "File exists with permissions 600 (or 400) and is owned by the operator",
-    "why": "decisions.jsonl is tool-gate's audit trail — every tool call, taint classification, and block decision. Missing = no audit trail (violates AU-2 — auditable events must be recorded). Weak permissions = a local process can tamper with or read gate reasoning (violates AU-9 — protection of audit information).",
+    "why": "decisions.jsonl is tool-gate's audit trail \u2014 every tool call, taint classification, and block decision. Missing = no audit trail (violates AU-2 \u2014 auditable events must be recorded). Weak permissions = a local process can tamper with or read gate reasoning (violates AU-9 \u2014 protection of audit information).",
     "fix": "chmod 600 ~/.openclaw/state/tool-gate/decisions.jsonl  # if missing, run any Claude Code invocation to initialize it",
     "scope": "agent"
   },
   "AS-3-decisions-ledger-fresh": {
-    "family": "AS-3 — Tool-Gate Decisions Ledger (Sarge/OpenClaw overlay; maps to AU-2)",
+    "family": "AS-3 \u2014 Tool-Gate Decisions Ledger (Sarge/OpenClaw overlay; maps to AU-2)",
     "what": "decisions.jsonl has not been modified in the last 7 days",
     "expected": "Ledger modified within the last 7 days (evidence the hook is still firing)",
-    "why": "A stale ledger on an active host means tool-gate has silently stopped firing — the hook file could be there, referenced, and still not running (permission drift, python interpreter gone, settings.json syntax error swallowed). AU-2 requires the events to actually be recorded, not just recordable.",
+    "why": "A stale ledger on an active host means tool-gate has silently stopped firing \u2014 the hook file could be there, referenced, and still not running (permission drift, python interpreter gone, settings.json syntax error swallowed). AU-2 requires the events to actually be recorded, not just recordable.",
     "fix": "Verify PreToolUse hook fires: run any Claude Code interaction, then check `stat ~/.openclaw/state/tool-gate/decisions.jsonl` for a fresh mtime. Also verify ~/.claude/settings.json has valid JSON and hooks.PreToolUse still references tool-gate.py.",
     "scope": "agent"
   },
   "AS-4-digest-cron": {
-    "family": "AS-4 — Tool-Gate Daily Digest (Sarge/OpenClaw overlay; maps to SI-4, AU-6)",
+    "family": "AS-4 \u2014 Tool-Gate Daily Digest (Sarge/OpenClaw overlay; maps to SI-4, AU-6)",
     "what": "gate-digest.sh is not registered in crontab",
     "expected": "A crontab entry runs ~/.claude/hooks/gate-digest.sh --post at least once per day",
-    "why": "gate-digest.sh summarizes would-block events (shadow-mode) and enforcement outcomes and posts them to Discord. Without it, the tool-gate signal is invisible to operators — SI-4 (system monitoring) has no reporting surface, and AU-6 (audit review) never happens.",
+    "why": "gate-digest.sh summarizes would-block events (shadow-mode) and enforcement outcomes and posts them to Discord. Without it, the tool-gate signal is invisible to operators \u2014 SI-4 (system monitoring) has no reporting surface, and AU-6 (audit review) never happens.",
     "fix": "crontab -e  # add: 0 8 * * * /home/oscar/.claude/hooks/gate-digest.sh --post >> /home/oscar/.openclaw/state/tool-gate/digest.log 2>&1",
     "scope": "agent"
   },
   "AS-5-gate-common-integrity": {
-    "family": "AS-5 — gate_common.py Integrity (Sarge/OpenClaw overlay; maps to SI-7, CM-6)",
+    "family": "AS-5 \u2014 gate_common.py Integrity (Sarge/OpenClaw overlay; maps to SI-7, CM-6)",
     "what": "Deployed ~/.claude/hooks/gate_common.py differs from upstream ~/openclaw/security/tool-gate/gate_common.py",
     "expected": "SHA-256 of deployed file matches upstream reference",
     "why": "gate_common.py defines SENSITIVE_WRITE_PATHS and taint-promotion logic. A tampered copy could silently narrow the gate (remove a path, weaken a promotion rule) without changing observable behavior on benign calls. SI-7 (software integrity) requires detection of unauthorized changes; CM-6 (config settings) requires the enforcement config to match the approved baseline.",
@@ -767,15 +766,15 @@
     "scope": "agent"
   },
   "AS-6-attestations-dir-perm": {
-    "family": "AS-6 — Workspace Attestations (Sarge/OpenClaw overlay; maps to CM-2, SI-7)",
+    "family": "AS-6 \u2014 Workspace Attestations (Sarge/OpenClaw overlay; maps to CM-2, SI-7)",
     "what": "~/.openclaw/workspace-attestations/ missing, or permissions are not 700",
     "expected": "Directory exists with permissions 700, owned by the operator",
-    "why": "workspace-attestations/ records signed attestations of workspace canon (SOUL.md, USER.md, AGENTS.md) — the baseline against which drift is measured. Missing = no CM-2 baseline. World/group-readable = a local process can enumerate every attested state, weakening the SI-7 integrity claim.",
+    "why": "workspace-attestations/ records signed attestations of workspace canon (SOUL.md, USER.md, AGENTS.md) \u2014 the baseline against which drift is measured. Missing = no CM-2 baseline. World/group-readable = a local process can enumerate every attested state, weakening the SI-7 integrity claim.",
     "fix": "mkdir -p ~/.openclaw/workspace-attestations && chmod 700 ~/.openclaw/workspace-attestations  # if OpenClaw has never run an attestation, trigger one via the workspace-attest workflow",
     "scope": "agent"
   },
   "AS-6-attestations-fresh": {
-    "family": "AS-6 — Workspace Attestations (Sarge/OpenClaw overlay; maps to CM-2, SI-7)",
+    "family": "AS-6 \u2014 Workspace Attestations (Sarge/OpenClaw overlay; maps to CM-2, SI-7)",
     "what": "No attestation file present, or the newest attestation is older than 30 days",
     "expected": "At least one *.attested file, newest modified within the last 30 days",
     "why": "A workspace-attestation baseline is only meaningful while it reflects the currently intended state. Stale attestations mean drift comparisons chase noise instead of real changes. CM-2 requires baselines to be reviewed on a defined cadence.",
@@ -783,15 +782,15 @@
     "scope": "agent"
   },
   "AS-7-workshop-present": {
-    "family": "AS-7 — Skill-Workshop Review Gate (Sarge/OpenClaw overlay; maps to CM-5, CM-7)",
+    "family": "AS-7 \u2014 Skill-Workshop Review Gate (Sarge/OpenClaw overlay; maps to CM-5, CM-7)",
     "what": "~/.openclaw/skill-workshop/ missing, or proposals/ subdirectory missing",
     "expected": "skill-workshop/ present with proposals/ subdirectory initialized (review queue available for new skills)",
-    "why": "Skill-workshop is the review-gated ingestion point for new skills (added in the OpenClaw 5.7 -> 6.x upgrade). Without it, ClawHub or ad-hoc skills install directly with no operator review — CM-5 (access restrictions for change) collapses, and CM-7 (least functionality) has no gate to enforce.",
+    "why": "Skill-workshop is the review-gated ingestion point for new skills (added in the OpenClaw 5.7 -> 6.x upgrade). Without it, ClawHub or ad-hoc skills install directly with no operator review \u2014 CM-5 (access restrictions for change) collapses, and CM-7 (least functionality) has no gate to enforce.",
     "fix": "Upgrade OpenClaw to a version that ships the skill-workshop primitive (>= 6.x), then enable it in config (workshop.enabled: true). See project_openclaw_upgrade_skill_workshop.md.",
     "scope": "agent"
   },
   "AS-8-cron-trust-perm": {
-    "family": "AS-8 — Cron-Trust Registration (Sarge/OpenClaw overlay; maps to CM-6, AU-2)",
+    "family": "AS-8 \u2014 Cron-Trust Registration (Sarge/OpenClaw overlay; maps to CM-6, AU-2)",
     "what": "~/.openclaw/state/tool-gate/cron-trust.json missing, or permissions are not 600/400",
     "expected": "File exists with permissions 600 (or 400) and is owned by the operator",
     "why": "cron-trust.json is the allowlist tool-gate consults to decide whether a cron-triggered tool call counts as trusted-origin (operator-installed cadence) or external-origin (block Tier-B/C). Missing = every cron job is treated as external and legitimate cadences fail. World/group-writable = a local process can silently add itself to the trusted-origin list.",
@@ -799,7 +798,7 @@
     "scope": "agent"
   },
   "AS-8-cron-trust-coverage": {
-    "family": "AS-8 — Cron-Trust Registration (Sarge/OpenClaw overlay; maps to CM-6, AU-2)",
+    "family": "AS-8 \u2014 Cron-Trust Registration (Sarge/OpenClaw overlay; maps to CM-6, AU-2)",
     "what": "One or more crontab entries reference openclaw / claude / gateway pathways without setting CRON_JOB_NAME",
     "expected": "Every runtime-related crontab entry declares CRON_JOB_NAME=<key> so tool-gate can look the entry up in cron-trust.json",
     "why": "Per feedback_cron_jobs_need_gate_registration.md, unregistered crons cost 266 false-positive taint promotions before the gap was noticed. CM-6 (config settings) requires the enforcement config to be complete for the assets it protects, and AU-2 needs the cron identity in the audit trail.",
@@ -807,7 +806,7 @@
     "scope": "agent"
   },
   "SA-9-external-mcp-servers": {
-    "family": "SA-9 — External System Services",
+    "family": "SA-9 \u2014 External System Services",
     "what": "One or more external MCP servers / API dependencies are configured under mcp.servers in the live OpenClaw config",
     "expected": "Every configured MCP server has a documented data-sharing agreement / risk review, or is removed if no longer needed",
     "why": "SA-9 requires organizations to identify external system services and the risks they introduce before relying on them. Each MCP server is a trust boundary the agent reaches across at runtime; an unreviewed server can exfiltrate data or be a supply-chain pivot point.",
@@ -815,23 +814,23 @@
     "scope": "agent"
   },
   "SA-22-ubuntu-eol": {
-    "family": "SA-22 — Unsupported System Components",
+    "family": "SA-22 \u2014 Unsupported System Components",
     "what": "The host's Ubuntu release is past end-of-life, or within 6 months of reaching it",
     "expected": "Running an Ubuntu LTS release with more than 6 months of standard support remaining",
-    "why": "SA-22 prohibits running unsupported system components — once a release passes EOL, it stops receiving security patches, so any newly disclosed kernel or userspace CVE goes unfixed indefinitely.",
+    "why": "SA-22 prohibits running unsupported system components \u2014 once a release passes EOL, it stops receiving security patches, so any newly disclosed kernel or userspace CVE goes unfixed indefinitely.",
     "fix": "Plan an in-place upgrade to the next Ubuntu LTS release (sudo do-release-upgrade) well before the EOL date.",
     "scope": "host"
   },
   "SA-22-node-eol": {
-    "family": "SA-22 — Unsupported System Components",
+    "family": "SA-22 \u2014 Unsupported System Components",
     "what": "The installed Node.js major version is past end-of-life, or within 6 months of reaching it",
     "expected": "Running a Node.js major version with more than 6 months of upstream support remaining",
-    "why": "SA-22 prohibits running unsupported system components — Node.js majors stop receiving security backports after EOL, and OpenClaw's runtime depends on Node for the gateway and MCP tooling.",
+    "why": "SA-22 prohibits running unsupported system components \u2014 Node.js majors stop receiving security backports after EOL, and OpenClaw's runtime depends on Node for the gateway and MCP tooling.",
     "fix": "Upgrade to a currently supported Node.js LTS line (e.g. via nvm: nvm install --lts && nvm alias default lts/*).",
     "scope": "host"
   },
   "MP-6-media-ttl": {
-    "family": "MP-6 — Media Sanitization",
+    "family": "MP-6 \u2014 Media Sanitization",
     "what": "media.ttlHours is unset or 0 in the live OpenClaw config",
     "expected": "media.ttlHours set to a positive value defining how long generated/received media is retained before cleanup",
     "why": "MP-6 requires media to be sanitized before it's no longer needed. Without a TTL, images/audio/video/downloads the agent handles accumulate on disk indefinitely, expanding the blast radius of a later compromise.",
@@ -839,7 +838,7 @@
     "scope": "agent"
   },
   "MP-6-media-max-size": {
-    "family": "MP-6 — Media Sanitization",
+    "family": "MP-6 \u2014 Media Sanitization",
     "what": "media.maxSizeMb is not set in the live OpenClaw config",
     "expected": "media.maxSizeMb set to a bounded value",
     "why": "Even with a TTL configured, an unbounded max size lets a burst of large media sit at rest for the full retention window, increasing both storage exposure and the amount of sensitive content a compromise could reach. Secondary indicator for MP-6.",
@@ -847,15 +846,15 @@
     "scope": "agent"
   },
   "SR-11-skill-attribution": {
-    "family": "SR-11 — Component Authenticity",
+    "family": "SR-11 \u2014 Component Authenticity",
     "what": "One or more installed skills under the skills directory have no source/author/origin/publisher metadata in SKILL.md",
     "expected": "Every installed skill's SKILL.md declares where it came from (source, origin, author, or publisher)",
-    "why": "SR-11 requires verifying the authenticity of system components before they're trusted. A skill with no attribution can't be traced back to a maintainer or reviewed for tampering — exactly the supply-chain blind spot SR-11 targets.",
+    "why": "SR-11 requires verifying the authenticity of system components before they're trusted. A skill with no attribution can't be traced back to a maintainer or reviewed for tampering \u2014 exactly the supply-chain blind spot SR-11 targets.",
     "fix": "Add a source/author/origin field to the SKILL.md front matter for each flagged skill, or remove skills that can't be attributed.",
     "scope": "agent"
   },
   "SR-11-apt-signing-keys": {
-    "family": "SR-11 — Component Authenticity",
+    "family": "SR-11 \u2014 Component Authenticity",
     "what": "No APT trusted GPG key files found under /etc/apt/trusted.gpg.d/ (or the legacy /etc/apt/trusted.gpg keyring)",
     "expected": "At least one trusted GPG key file present so apt can verify package signatures",
     "why": "SR-11 requires verifying component authenticity through the supply chain; APT's GPG keyring is the mechanism that lets the package manager reject tampered or unsigned .deb packages before install.",
@@ -863,7 +862,7 @@
     "scope": "host"
   },
   "AC-4-network-isolation": {
-    "family": "AC-4 — Information Flow Enforcement",
+    "family": "AC-4 \u2014 Information Flow Enforcement",
     "what": "OpenClaw outbound network access is unrestricted",
     "expected": "network.allowedHosts configured to limit outbound destinations",
     "why": "NIST 800-53 AC-4 requires information flow enforcement. An agent with unrestricted outbound access can exfiltrate data to any destination.",
@@ -871,7 +870,7 @@
     "scope": "agent"
   },
   "AC-5-agent-admin-same-account": {
-    "family": "AC-5 — Separation of Duties",
+    "family": "AC-5 \u2014 Separation of Duties",
     "what": "The account running OpenClaw is also a member of the sudo/admin group",
     "expected": "The OpenClaw agent runs under a dedicated service account that is not the system administrator account",
     "why": "AC-5 requires separating duties so a single compromised identity can't both operate the agent and administer the host. If the agent account has sudo, a prompt-injection or tool-use bug becomes a path to full root.",
@@ -879,7 +878,7 @@
     "scope": "host"
   },
   "AC-7-faillock-deny": {
-    "family": "AC-7 — Unsuccessful Logon Attempts",
+    "family": "AC-7 \u2014 Unsuccessful Logon Attempts",
     "what": "pam_faillock is configured but the deny threshold is weak or unset",
     "expected": "faillock.conf deny set to 3 or more failed attempts before lockout",
     "why": "AC-7 requires the system to enforce a limit on consecutive invalid logon attempts. A missing or overly permissive deny threshold leaves accounts open to online brute-force guessing.",
@@ -887,7 +886,7 @@
     "scope": "host"
   },
   "AC-7-faillock-not-configured": {
-    "family": "AC-7 — Unsuccessful Logon Attempts",
+    "family": "AC-7 \u2014 Unsuccessful Logon Attempts",
     "what": "pam_faillock is not referenced in /etc/pam.d/common-auth",
     "expected": "pam_faillock enabled in common-auth so failed logons trigger a temporary lockout",
     "why": "AC-7 requires the system to enforce a limit on consecutive invalid logon attempts. With no lockout mechanism configured, an attacker can brute-force credentials with no rate limiting at the OS layer.",
@@ -895,7 +894,7 @@
     "scope": "host"
   },
   "AC-8-ssh-banner": {
-    "family": "AC-8 — System Use Notification",
+    "family": "AC-8 \u2014 System Use Notification",
     "what": "No SSH Banner directive is configured in sshd_config",
     "expected": "A Banner directive pointing to a system-use notification file, displayed before authentication",
     "why": "AC-8 requires a system-use notification presented to users before they gain access, establishing legal/authorized-use notice. Without a banner, the host offers no acceptable-use warning to anyone connecting via SSH.",
@@ -903,7 +902,7 @@
     "scope": "host"
   },
   "AC-10-maxlogins": {
-    "family": "AC-10 — Concurrent Session Control",
+    "family": "AC-10 \u2014 Concurrent Session Control",
     "what": "No maxlogins limit is set in /etc/security/limits.conf",
     "expected": "A maxlogins entry bounding the number of concurrent sessions per user",
     "why": "AC-10 requires limiting the number of concurrent sessions for each account. Unbounded concurrent sessions widen the window an attacker with stolen credentials can operate in parallel with the legitimate user.",
@@ -911,7 +910,7 @@
     "scope": "host"
   },
   "AC-11-session-timeout": {
-    "family": "AC-11 — Device Lock",
+    "family": "AC-11 \u2014 Device Lock",
     "what": "No TMOUT (shell idle timeout) is configured",
     "expected": "TMOUT set in /etc/profile or /etc/profile.d/ so idle interactive shells auto-terminate",
     "why": "AC-11 requires the system to initiate a device lock after a period of inactivity. Without TMOUT, an idle authenticated shell stays open indefinitely, exposed to anyone with physical or session access.",
@@ -919,7 +918,7 @@
     "scope": "host"
   },
   "AC-12-session-idle-timeout": {
-    "family": "AC-12 — Session Termination",
+    "family": "AC-12 \u2014 Session Termination",
     "what": "sessions.idleTimeoutMinutes is not set in the live OpenClaw config",
     "expected": "sessions.idleTimeoutMinutes set to a bounded value",
     "why": "AC-12 requires automatic session termination after a defined idle period. Without it, an OpenClaw session can sit open indefinitely, extending the window an attacker who hijacks it has to act.",
@@ -927,15 +926,15 @@
     "scope": "agent"
   },
   "AC-14-auth-disabled": {
-    "family": "AC-14 — Permitted Actions Without Identification or Authentication",
+    "family": "AC-14 \u2014 Permitted Actions Without Identification or Authentication",
     "what": "OpenClaw's auth.enabled is false, or not explicitly set, in the live config",
     "expected": "auth.enabled explicitly set to true so gateway actions require identification/authentication",
-    "why": "AC-14 requires organizations to explicitly identify and document any actions permitted without authentication — everything else must require it. A gateway with auth disabled (or unstated) accepts commands from anyone who can reach it.",
+    "why": "AC-14 requires organizations to explicitly identify and document any actions permitted without authentication \u2014 everything else must require it. A gateway with auth disabled (or unstated) accepts commands from anyone who can reach it.",
     "fix": "Set auth.enabled to true in openclaw.json and configure at least one auth provider.",
     "scope": "agent"
   },
   "CM-3-change-control": {
-    "family": "CM-3 — Configuration Change Control",
+    "family": "CM-3 \u2014 Configuration Change Control",
     "what": "~/.openclaw is not under version control and no Sarge drift snapshot exists",
     "expected": "Either ~/.openclaw is a git working tree, or a Sarge drift snapshot baseline has been captured",
     "why": "CM-3 requires a documented process for tracking and reviewing configuration changes. Without version control or a drift baseline, config changes happen silently and can't be attributed, reviewed, or rolled back.",
@@ -943,7 +942,7 @@
     "scope": "agent"
   },
   "CM-5-config-owner": {
-    "family": "CM-5 — Access Restrictions for Change",
+    "family": "CM-5 \u2014 Access Restrictions for Change",
     "what": "The live OpenClaw config file is not owned by the account that runs OpenClaw",
     "expected": "openclaw.json (or config.json) owned by the OpenClaw agent's own user account",
     "why": "CM-5 requires restricting who can make configuration changes to authorized individuals/processes. A config owned by a different account (especially root) either blocks legitimate self-service changes or signals the file was placed by a process outside the agent's own control.",
@@ -951,7 +950,7 @@
     "scope": "agent"
   },
   "CM-8-component-inventory": {
-    "family": "CM-8 — System Component Inventory",
+    "family": "CM-8 \u2014 System Component Inventory",
     "what": "Informational snapshot of installed components: Node.js runtime version, configured MCP servers, and configured plugins",
     "expected": "The reported inventory matches an approved/expected component list for this host",
     "why": "CM-8 requires maintaining an inventory of system components. This finding surfaces what Sarge could enumerate so operators can reconcile it against their own change-management records rather than discover drift after the fact.",
@@ -959,11 +958,67 @@
     "scope": "agent"
   },
   "CM-11-global-npm-packages": {
-    "family": "CM-11 — User-Installed Software",
+    "family": "CM-11 \u2014 User-Installed Software",
     "what": "Global npm packages are installed outside the OpenClaw dependency tree",
     "expected": "No unreviewed global npm packages present, or all of them are explicitly approved",
     "why": "CM-11 requires controlling user-installed software. Globally-installed npm packages bypass package.json-tracked dependency review and can introduce unreviewed code with broad filesystem/network access.",
     "fix": "Run 'npm list -g --depth=0', review each entry, and 'npm uninstall -g <package>' anything not explicitly approved.",
     "scope": "host"
+  },
+  "SC-2-process-isolation": {
+    "family": "SC-2 \u2014 Application Partitioning",
+    "what": "OpenClaw is running as root",
+    "expected": "OpenClaw runs under a dedicated non-root service account",
+    "why": "NIST 800-53 SC-2 requires separation between user-facing and system management functionality. Running the agent as root gives it unrestricted access to the entire system, violating least privilege and increasing blast radius of any compromise.",
+    "fix": "Create a dedicated service account (e.g. 'openclaw') and run the gateway under that account: sudo -u openclaw openclaw gateway start"
+  },
+  "SC-2-namespace-isolation": {
+    "family": "SC-2 \u2014 Application Partitioning",
+    "what": "OpenClaw shares the host mount namespace",
+    "expected": "OpenClaw runs in an isolated namespace or container",
+    "why": "Namespace isolation limits the agent's view of the filesystem and process tree. Without it, a compromised agent can access any host file.",
+    "fix": "Run OpenClaw in a container, or use unshare/systemd namespace features to isolate its mount namespace."
+  },
+  "SC-4-tmp-residual": {
+    "family": "SC-4 \u2014 Information in Shared Resources",
+    "what": "Excessive OpenClaw/Claude temp files in /tmp",
+    "expected": "Temp files cleaned up after session ends",
+    "why": "NIST 800-53 SC-4 requires preventing unauthorized information transfer via shared resources. Residual session data in /tmp may contain conversation fragments, tool outputs, or credentials from prior runs.",
+    "fix": "Configure a systemd-tmpfiles.d rule or cron to clean /tmp/claude-* and /tmp/openclaw-* periodically."
+  },
+  "SC-4-shm-residual": {
+    "family": "SC-4 \u2014 Information in Shared Resources",
+    "what": "Files present in /dev/shm shared memory",
+    "expected": "No unexpected files in /dev/shm",
+    "why": "Shared memory is world-readable by default. Sensitive data left in /dev/shm can be read by any process on the host.",
+    "fix": "Review and remove unnecessary files from /dev/shm. Ensure applications clean up shared memory segments on exit."
+  },
+  "SC-12-key-permissions": {
+    "family": "SC-12 \u2014 Cryptographic Key Establishment and Management",
+    "what": "Key or credential files under ~/.openclaw/secrets/ have weak permissions",
+    "expected": "All key/credential files are 600 or 400",
+    "why": "NIST 800-53 SC-12 requires managing cryptographic keys throughout their lifecycle. Files with permissions broader than 600 allow other users on the system to read key material.",
+    "fix": "chmod 600 ~/.openclaw/secrets/<file>"
+  },
+  "SC-12-ssh-key-permissions": {
+    "family": "SC-12 \u2014 Cryptographic Key Establishment and Management",
+    "what": "SSH private keys have weak permissions",
+    "expected": "SSH private keys are 600 or 400",
+    "why": "SSH private keys with overly permissive modes can be read by other users. SSH itself refuses to use keys with bad permissions, but the key material is still exposed.",
+    "fix": "chmod 600 ~/.ssh/id_*"
+  },
+  "SC-13-openssl-version": {
+    "family": "SC-13 \u2014 Cryptographic Protection",
+    "what": "OpenSSL version may not meet cryptographic requirements",
+    "expected": "OpenSSL 1.1+ or 3.x (FIPS-capable)",
+    "why": "NIST 800-53 SC-13 requires FIPS-validated cryptography for federal systems. OpenSSL 3.x includes a FIPS provider module; older versions may not support required algorithms or modes.",
+    "fix": "Upgrade to OpenSSL 3.x: sudo apt install openssl"
+  },
+  "SC-13-node-tls": {
+    "family": "SC-13 \u2014 Cryptographic Protection",
+    "what": "Node.js version may not enforce TLS 1.2+ by default",
+    "expected": "Node.js 18+ (uses OpenSSL 3.x, TLS 1.2+ default min)",
+    "why": "Node.js versions below 18 use OpenSSL 1.x and may negotiate TLS 1.0/1.1, which have known weaknesses. NIST 800-53 SC-13 requires approved cryptographic mechanisms.",
+    "fix": "Upgrade to Node.js 18 LTS or later."
   }
 }
