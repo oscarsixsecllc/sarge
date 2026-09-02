@@ -90,3 +90,152 @@ if [[ -z "$LISTENING" ]]; then
 else
   warnx "AC-17-external-ports" "AC-17: Externally-listening ports found — review: $(echo "$LISTENING" | tr '\n' ' ')"
 fi
+
+# AC-4: Information Flow Enforcement — OpenClaw outbound network restriction
+#
+# Live OpenClaw 2026.7.x writes runtime config to `openclaw.json`; older
+# installs used `config.json`. Same fallback probe as check-ia.sh / check-sa.sh
+# (issue #61).
+log "AC-4: Information Flow Enforcement"
+AC_OC_CONFIG=""
+for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+  if [[ -f "$candidate" ]]; then
+    AC_OC_CONFIG="$candidate"
+    break
+  fi
+done
+if [[ -n "$AC_OC_CONFIG" ]]; then
+  AC_CONFIG_NAME=$(basename "$AC_OC_CONFIG")
+  if grep -qE '"allowedHosts"' "$AC_OC_CONFIG" 2>/dev/null; then
+    passx "AC-4-network-isolation" "AC-4: network.allowedHosts is configured in $AC_CONFIG_NAME"
+  else
+    warnx "AC-4-network-isolation" "AC-4: No network.allowedHosts restriction found in $AC_CONFIG_NAME — outbound network access is unrestricted"
+  fi
+else
+  skipx "AC-4-network-isolation" "AC-4: OpenClaw config not found at ~/.openclaw/openclaw.json (or legacy ~/.openclaw/config.json)"
+fi
+
+# AC-5: Separation of Duties — agent account vs. system admin account
+log "AC-5: Separation of Duties"
+AC5_USER=$(whoami)
+AC5_ADMIN_GROUP=$(platform admin_group_name)
+if [[ -d "$HOME/.openclaw" ]] && platform user_in_admin_group "$AC5_USER"; then
+  warnx "AC-5-agent-admin-same-account" "AC-5: $AC5_USER runs OpenClaw and is a member of the $AC5_ADMIN_GROUP group — agent and system-admin accounts should be separated"
+else
+  passx "AC-5-agent-admin-same-account" "AC-5: OpenClaw account ($AC5_USER) is not in the $AC5_ADMIN_GROUP admin group, or no OpenClaw install detected"
+fi
+
+# AC-7: Unsuccessful Logon Attempts — pam_faillock lockout policy
+log "AC-7: Unsuccessful Logon Attempts"
+if ! platform_supports pam_faillock_configured; then
+  skipx "AC-7-faillock-not-configured" "AC-7: pam_faillock is a Linux-PAM construct; on ${SARGE_OS_DESCRIPTION} account lockout is enforced via pwpolicy / MDM account policies"
+elif platform pam_faillock_configured; then
+  AC7_DENY=$(platform faillock_value deny)
+  if [[ -n "$AC7_DENY" && "$AC7_DENY" -ge 3 ]]; then
+    passx "AC-7-faillock-deny" "AC-7: pam_faillock deny is $AC7_DENY (lockout after $AC7_DENY attempts)"
+  else
+    warnx "AC-7-faillock-deny" "AC-7: pam_faillock deny is ${AC7_DENY:-unset} — recommend 3 or more failed attempts before lockout"
+  fi
+else
+  failx "AC-7-faillock-not-configured" "AC-7: pam_faillock not referenced in common-auth — no unsuccessful-logon lockout configured"
+fi
+
+# AC-8: System Use Notification — SSH login banner
+#
+# Reuses the sshd_config + sshd_config.d drop-in discovery pattern from
+# CM-7's SSH section (check-cm.sh) — see that file's comment for the
+# first-match-wins rationale.
+log "AC-8: System Use Notification"
+if platform sshd_active; then
+  AC8_SSHD_CONFIG=$(platform sshd_config_path)
+  _AC8_SSHD_CONF_FILES=("$AC8_SSHD_CONFIG")
+  AC8_SSHD_DROPIN_DIR="${AC8_SSHD_CONFIG%/*}/sshd_config.d"
+  if [[ -d "$AC8_SSHD_DROPIN_DIR" ]]; then
+    while IFS= read -r f; do
+      _AC8_SSHD_CONF_FILES+=("$f")
+    done < <(find "$AC8_SSHD_DROPIN_DIR" -maxdepth 1 -name '*.conf' -type f 2>/dev/null | sort)
+  fi
+  if grep -qiE "^Banner\s+\S" "${_AC8_SSHD_CONF_FILES[@]}" 2>/dev/null; then
+    passx "AC-8-ssh-banner" "AC-8: SSH login Banner is configured"
+  else
+    warnx "AC-8-ssh-banner" "AC-8: No SSH Banner directive found — configure a system-use notification banner"
+  fi
+else
+  skipx "AC-8-ssh-banner" "AC-8: SSH server not active — banner check not applicable"
+fi
+
+# AC-10: Concurrent Session Control — limits.conf maxlogins
+log "AC-10: Concurrent Session Control"
+AC10_LIMITS_CONF="/etc/security/limits.conf"
+if [[ -f "$AC10_LIMITS_CONF" ]] && grep -qE "maxlogins" "$AC10_LIMITS_CONF" 2>/dev/null; then
+  passx "AC-10-maxlogins" "AC-10: maxlogins limit configured in $AC10_LIMITS_CONF"
+else
+  warnx "AC-10-maxlogins" "AC-10: No maxlogins limit configured in $AC10_LIMITS_CONF — concurrent sessions are unbounded"
+fi
+
+# AC-11: Device Lock — shell session idle timeout (TMOUT)
+log "AC-11: Device Lock"
+AC11_TMOUT=$(platform session_timeout_setting)
+if [[ -n "$AC11_TMOUT" ]]; then
+  passx "AC-11-session-timeout" "AC-11: Session timeout is configured: $AC11_TMOUT"
+else
+  warnx "AC-11-session-timeout" "AC-11: No TMOUT session timeout configured — idle sessions do not auto-lock"
+fi
+
+# AC-12: Session Termination — OpenClaw session idle timeout
+log "AC-12: Session Termination"
+AC_OC_CONFIG=""
+for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+  if [[ -f "$candidate" ]]; then
+    AC_OC_CONFIG="$candidate"
+    break
+  fi
+done
+if [[ -n "$AC_OC_CONFIG" ]]; then
+  AC_CONFIG_NAME=$(basename "$AC_OC_CONFIG")
+  AC12_IDLE_MIN=$(grep -oE '"idleTimeoutMinutes"[[:space:]]*:[[:space:]]*[0-9]+' "$AC_OC_CONFIG" 2>/dev/null | grep -oE '[0-9]+$' | head -1)
+  if [[ -n "$AC12_IDLE_MIN" ]]; then
+    passx "AC-12-session-idle-timeout" "AC-12: sessions.idleTimeoutMinutes is $AC12_IDLE_MIN in $AC_CONFIG_NAME"
+  else
+    warnx "AC-12-session-idle-timeout" "AC-12: sessions.idleTimeoutMinutes not set in $AC_CONFIG_NAME — sessions may never auto-terminate"
+  fi
+else
+  skipx "AC-12-session-idle-timeout" "AC-12: OpenClaw config not found at ~/.openclaw/openclaw.json (or legacy ~/.openclaw/config.json)"
+fi
+
+# AC-14: Permitted Actions Without Identification or Authentication
+log "AC-14: Permitted Actions Without Identification"
+AC_OC_CONFIG=""
+for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+  if [[ -f "$candidate" ]]; then
+    AC_OC_CONFIG="$candidate"
+    break
+  fi
+done
+if [[ -n "$AC_OC_CONFIG" ]]; then
+  AC_CONFIG_NAME=$(basename "$AC_OC_CONFIG")
+  AC14_AUTH_ENABLED=""
+  if command -v jq &>/dev/null; then
+    AC14_AUTH_ENABLED=$(jq -r '.auth.enabled // empty' "$AC_OC_CONFIG" 2>/dev/null)
+  elif command -v python3 &>/dev/null; then
+    AC14_AUTH_ENABLED=$(python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    v = (d.get("auth") or {}).get("enabled")
+    if v is not None:
+        print(str(v).lower())
+except Exception:
+    pass
+' "$AC_OC_CONFIG" 2>/dev/null)
+  fi
+  if [[ "$AC14_AUTH_ENABLED" == "false" ]]; then
+    failx "AC-14-auth-disabled" "AC-14: OpenClaw auth.enabled is false in $AC_CONFIG_NAME — the gateway permits actions without identification"
+  elif [[ "$AC14_AUTH_ENABLED" == "true" ]]; then
+    passx "AC-14-auth-disabled" "AC-14: OpenClaw auth.enabled is true in $AC_CONFIG_NAME"
+  else
+    warnx "AC-14-auth-disabled" "AC-14: No explicit auth.enabled found in $AC_CONFIG_NAME — verify unauthenticated access is not permitted"
+  fi
+else
+  skipx "AC-14-auth-disabled" "AC-14: OpenClaw config not found at ~/.openclaw/openclaw.json (or legacy ~/.openclaw/config.json)"
+fi

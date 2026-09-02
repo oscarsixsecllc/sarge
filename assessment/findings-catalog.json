@@ -861,5 +861,109 @@
     "why": "SR-11 requires verifying component authenticity through the supply chain; APT's GPG keyring is the mechanism that lets the package manager reject tampered or unsigned .deb packages before install.",
     "fix": "Reinstall the distribution's default keyring package (ubuntu-keyring) or re-add trusted keys for configured third-party repositories.",
     "scope": "host"
+  },
+  "AC-4-network-isolation": {
+    "family": "AC-4 — Information Flow Enforcement",
+    "what": "OpenClaw outbound network access is unrestricted",
+    "expected": "network.allowedHosts configured to limit outbound destinations",
+    "why": "NIST 800-53 AC-4 requires information flow enforcement. An agent with unrestricted outbound access can exfiltrate data to any destination.",
+    "fix": "Add network.allowedHosts to openclaw.json with the list of permitted destinations.",
+    "scope": "agent"
+  },
+  "AC-5-agent-admin-same-account": {
+    "family": "AC-5 — Separation of Duties",
+    "what": "The account running OpenClaw is also a member of the sudo/admin group",
+    "expected": "The OpenClaw agent runs under a dedicated service account that is not the system administrator account",
+    "why": "AC-5 requires separating duties so a single compromised identity can't both operate the agent and administer the host. If the agent account has sudo, a prompt-injection or tool-use bug becomes a path to full root.",
+    "fix": "Create a dedicated non-admin service account for OpenClaw and migrate the deployment to it; remove the current account from the sudo/admin group.",
+    "scope": "host"
+  },
+  "AC-7-faillock-deny": {
+    "family": "AC-7 — Unsuccessful Logon Attempts",
+    "what": "pam_faillock is configured but the deny threshold is weak or unset",
+    "expected": "faillock.conf deny set to 3 or more failed attempts before lockout",
+    "why": "AC-7 requires the system to enforce a limit on consecutive invalid logon attempts. A missing or overly permissive deny threshold leaves accounts open to online brute-force guessing.",
+    "fix": "Set 'deny = 3' (or higher) in /etc/security/faillock.conf.",
+    "scope": "host"
+  },
+  "AC-7-faillock-not-configured": {
+    "family": "AC-7 — Unsuccessful Logon Attempts",
+    "what": "pam_faillock is not referenced in /etc/pam.d/common-auth",
+    "expected": "pam_faillock enabled in common-auth so failed logons trigger a temporary lockout",
+    "why": "AC-7 requires the system to enforce a limit on consecutive invalid logon attempts. With no lockout mechanism configured, an attacker can brute-force credentials with no rate limiting at the OS layer.",
+    "fix": "Add pam_faillock to /etc/pam.d/common-auth (auth required pam_faillock.so preauth / authfail / account required pam_faillock.so) and set a deny threshold in faillock.conf.",
+    "scope": "host"
+  },
+  "AC-8-ssh-banner": {
+    "family": "AC-8 — System Use Notification",
+    "what": "No SSH Banner directive is configured in sshd_config",
+    "expected": "A Banner directive pointing to a system-use notification file, displayed before authentication",
+    "why": "AC-8 requires a system-use notification presented to users before they gain access, establishing legal/authorized-use notice. Without a banner, the host offers no acceptable-use warning to anyone connecting via SSH.",
+    "fix": "Create a banner file (e.g. /etc/issue.net) with system-use notification text and set 'Banner /etc/issue.net' in sshd_config, then restart sshd.",
+    "scope": "host"
+  },
+  "AC-10-maxlogins": {
+    "family": "AC-10 — Concurrent Session Control",
+    "what": "No maxlogins limit is set in /etc/security/limits.conf",
+    "expected": "A maxlogins entry bounding the number of concurrent sessions per user",
+    "why": "AC-10 requires limiting the number of concurrent sessions for each account. Unbounded concurrent sessions widen the window an attacker with stolen credentials can operate in parallel with the legitimate user.",
+    "fix": "Add a line like '* hard maxlogins 3' to /etc/security/limits.conf.",
+    "scope": "host"
+  },
+  "AC-11-session-timeout": {
+    "family": "AC-11 — Device Lock",
+    "what": "No TMOUT (shell idle timeout) is configured",
+    "expected": "TMOUT set in /etc/profile or /etc/profile.d/ so idle interactive shells auto-terminate",
+    "why": "AC-11 requires the system to initiate a device lock after a period of inactivity. Without TMOUT, an idle authenticated shell stays open indefinitely, exposed to anyone with physical or session access.",
+    "fix": "Set 'TMOUT=900' (or your policy's idle window) in /etc/profile.d/tmout.sh and make it readonly/exported.",
+    "scope": "host"
+  },
+  "AC-12-session-idle-timeout": {
+    "family": "AC-12 — Session Termination",
+    "what": "sessions.idleTimeoutMinutes is not set in the live OpenClaw config",
+    "expected": "sessions.idleTimeoutMinutes set to a bounded value",
+    "why": "AC-12 requires automatic session termination after a defined idle period. Without it, an OpenClaw session can sit open indefinitely, extending the window an attacker who hijacks it has to act.",
+    "fix": "Set sessions.idleTimeoutMinutes in openclaw.json to a reasonable idle window (e.g. 30-60 minutes).",
+    "scope": "agent"
+  },
+  "AC-14-auth-disabled": {
+    "family": "AC-14 — Permitted Actions Without Identification or Authentication",
+    "what": "OpenClaw's auth.enabled is false, or not explicitly set, in the live config",
+    "expected": "auth.enabled explicitly set to true so gateway actions require identification/authentication",
+    "why": "AC-14 requires organizations to explicitly identify and document any actions permitted without authentication — everything else must require it. A gateway with auth disabled (or unstated) accepts commands from anyone who can reach it.",
+    "fix": "Set auth.enabled to true in openclaw.json and configure at least one auth provider.",
+    "scope": "agent"
+  },
+  "CM-3-change-control": {
+    "family": "CM-3 — Configuration Change Control",
+    "what": "~/.openclaw is not under version control and no Sarge drift snapshot exists",
+    "expected": "Either ~/.openclaw is a git working tree, or a Sarge drift snapshot baseline has been captured",
+    "why": "CM-3 requires a documented process for tracking and reviewing configuration changes. Without version control or a drift baseline, config changes happen silently and can't be attributed, reviewed, or rolled back.",
+    "fix": "Run 'git init' in ~/.openclaw and commit the current config, and/or run drift/snapshot.sh to establish a Sarge baseline.",
+    "scope": "agent"
+  },
+  "CM-5-config-owner": {
+    "family": "CM-5 — Access Restrictions for Change",
+    "what": "The live OpenClaw config file is not owned by the account that runs OpenClaw",
+    "expected": "openclaw.json (or config.json) owned by the OpenClaw agent's own user account",
+    "why": "CM-5 requires restricting who can make configuration changes to authorized individuals/processes. A config owned by a different account (especially root) either blocks legitimate self-service changes or signals the file was placed by a process outside the agent's own control.",
+    "fix": "chown the config file to the OpenClaw service account: sudo chown <agent-user> ~/.openclaw/openclaw.json.",
+    "scope": "agent"
+  },
+  "CM-8-component-inventory": {
+    "family": "CM-8 — System Component Inventory",
+    "what": "Informational snapshot of installed components: Node.js runtime version, configured MCP servers, and configured plugins",
+    "expected": "The reported inventory matches an approved/expected component list for this host",
+    "why": "CM-8 requires maintaining an inventory of system components. This finding surfaces what Sarge could enumerate so operators can reconcile it against their own change-management records rather than discover drift after the fact.",
+    "fix": "Compare the reported Node.js version, MCP server list, and plugin list against your approved baseline; update the baseline or remediate any unapproved component.",
+    "scope": "agent"
+  },
+  "CM-11-global-npm-packages": {
+    "family": "CM-11 — User-Installed Software",
+    "what": "Global npm packages are installed outside the OpenClaw dependency tree",
+    "expected": "No unreviewed global npm packages present, or all of them are explicitly approved",
+    "why": "CM-11 requires controlling user-installed software. Globally-installed npm packages bypass package.json-tracked dependency review and can introduce unreviewed code with broad filesystem/network access.",
+    "fix": "Run 'npm list -g --depth=0', review each entry, and 'npm uninstall -g <package>' anything not explicitly approved.",
+    "scope": "host"
   }
 }

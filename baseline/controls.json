@@ -318,6 +318,114 @@
       "openclaw_settings": [],
       "os_checks": ["ls ~/.openclaw/skills", "ls /etc/apt/trusted.gpg.d/"],
       "remediation": "Add source/author/origin metadata to installed skills. Verify APT package signing keys are present under /etc/apt/trusted.gpg.d/."
+    },
+    {
+      "id": "AC-4",
+      "family": "AC",
+      "name": "Information Flow Enforcement",
+      "status": "full",
+      "openclaw_settings": ["network.allowedHosts"],
+      "os_checks": ["iptables -L"],
+      "remediation": "Configure network.allowedHosts in openclaw.json to restrict outbound connections."
+    },
+    {
+      "id": "AC-5",
+      "family": "AC",
+      "name": "Separation of Duties",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["whoami", "groups <user>"],
+      "remediation": "Run OpenClaw under a dedicated service account that is not a member of the sudo/admin group."
+    },
+    {
+      "id": "AC-7",
+      "family": "AC",
+      "name": "Unsuccessful Logon Attempts",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["grep pam_faillock /etc/pam.d/common-auth", "cat /etc/security/faillock.conf"],
+      "remediation": "Enable pam_faillock in /etc/pam.d/common-auth and set deny to 3 or more failed attempts before lockout."
+    },
+    {
+      "id": "AC-8",
+      "family": "AC",
+      "name": "System Use Notification",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["grep ^Banner /etc/ssh/sshd_config"],
+      "remediation": "Set a Banner directive in sshd_config pointing to a system-use notification file."
+    },
+    {
+      "id": "AC-10",
+      "family": "AC",
+      "name": "Concurrent Session Control",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["grep maxlogins /etc/security/limits.conf"],
+      "remediation": "Set a maxlogins limit in /etc/security/limits.conf to bound concurrent sessions per user."
+    },
+    {
+      "id": "AC-11",
+      "family": "AC",
+      "name": "Device Lock",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["grep TMOUT /etc/profile /etc/profile.d/*"],
+      "remediation": "Set TMOUT in /etc/profile or /etc/profile.d/ to auto-lock idle shell sessions."
+    },
+    {
+      "id": "AC-12",
+      "family": "AC",
+      "name": "Session Termination",
+      "status": "full",
+      "openclaw_settings": ["sessions.idleTimeoutMinutes"],
+      "os_checks": [],
+      "remediation": "Set sessions.idleTimeoutMinutes in openclaw.json so idle OpenClaw sessions terminate automatically."
+    },
+    {
+      "id": "AC-14",
+      "family": "AC",
+      "name": "Permitted Actions Without Identification or Authentication",
+      "status": "full",
+      "openclaw_settings": ["auth.enabled"],
+      "os_checks": [],
+      "remediation": "Set auth.enabled to true in openclaw.json so gateway actions require identification/authentication."
+    },
+    {
+      "id": "CM-3",
+      "family": "CM",
+      "name": "Configuration Change Control",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["ls -la ~/.openclaw/.git", "ls ~/.sarge/snapshots/latest.json"],
+      "remediation": "Track ~/.openclaw under version control, or run drift/snapshot.sh regularly to detect unreviewed configuration changes."
+    },
+    {
+      "id": "CM-5",
+      "family": "CM",
+      "name": "Access Restrictions for Change",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["stat -c %U ~/.openclaw/openclaw.json"],
+      "remediation": "Ensure OpenClaw config files are owned by the agent service account, not root."
+    },
+    {
+      "id": "CM-8",
+      "family": "CM",
+      "name": "System Component Inventory",
+      "status": "full",
+      "openclaw_settings": ["mcp.servers", "plugins.entries"],
+      "os_checks": ["node --version"],
+      "remediation": "Maintain an approved component list and reconcile it against the reported Node.js version, MCP servers, and plugins."
+    },
+    {
+      "id": "CM-11",
+      "family": "CM",
+      "name": "User-Installed Software",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["npm list -g --depth=0"],
+      "remediation": "Review globally-installed npm packages and remove any that are not approved for the host."
     }
   ]
 }
