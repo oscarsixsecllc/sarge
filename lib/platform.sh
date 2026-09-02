@@ -66,7 +66,7 @@ _sarge_is_supported_version() {
   case "$SARGE_OS" in
     ubuntu)
       case "$SARGE_OS_VERSION" in
-        22.04|24.04) return 0 ;;
+        22.04|24.04|26.04) return 0 ;;
         *) return 1 ;;
       esac
       ;;
@@ -95,7 +95,7 @@ sarge_require_supported_os() {
   if [[ "$SARGE_OS" == "unsupported" ]] || ! _sarge_is_supported_version; then
     echo "[Sarge] Unsupported platform: ${SARGE_OS_DESCRIPTION}" >&2
     echo "[Sarge] Sarge supports:" >&2
-    echo "  - Ubuntu 22.04 / 24.04 LTS  (full coverage)" >&2
+    echo "  - Ubuntu 22.04 / 24.04 / 26.04 LTS  (full coverage)" >&2
     echo "  - macOS                     (in progress — see roadmap)" >&2
     echo "  - Windows                   (detection-only via assess.ps1 — see roadmap)" >&2
     echo "[Sarge] Roadmap: https://github.com/oscarsixsecllc/sarge/issues" >&2

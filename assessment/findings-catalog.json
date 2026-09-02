@@ -161,6 +161,20 @@
     "why": "Without a documented baseline, every change looks new and there's no anchor for what 'good' looks like. NIST 800-53 CM-2 requires maintaining a current baseline configuration of the information system. For sarge specifically, the baseline file is what subsequent runs compare against to detect drift in the OpenClaw layout.",
     "fix": "Restore baseline/openclaw.json.baseline from the sarge repo, or regenerate from a known-good host."
   },
+  "CM-2-baseline-version-pin-missing": {
+    "family": "CM-2 — Baseline Configuration",
+    "what": "Sarge baseline file is present but lacks the _openclawVersion schema-version pin",
+    "expected": "baseline/openclaw.json.baseline includes a top-level _openclawVersion field naming the OpenClaw release the baseline was authored against",
+    "why": "OpenClaw's config schema evolves; a baseline written against one release will silently misclassify fields when compared against a substantially different release. NIST 800-53 CM-2 requires baselines to be current and identifiable. The pin lets drift tooling refuse comparison (or warn) when the running OpenClaw is too far from the baseline's schema of record.",
+    "fix": "Upgrade Sarge to a version that ships baseline/openclaw.json.baseline v0.6.0 or newer, or add the pin manually: \"_openclawVersion\": \"<running-version>\"."
+  },
+  "CM-2-baseline-version-drift": {
+    "family": "CM-2 — Baseline Configuration",
+    "what": "Running OpenClaw version differs from the baseline's _openclawVersion pin by more than one minor release",
+    "expected": "Baseline authored against the same major.minor as the running OpenClaw (patch-level drift is fine)",
+    "why": "A baseline more than one minor behind the running OpenClaw is missing new config surfaces (new tools, new gateway options, new sandbox knobs). Drift comparisons will report false PASS for controls that reference config keys the baseline never knew existed. NIST 800-53 CM-2 requires the baseline to reflect the currently deployed configuration surface.",
+    "fix": "Update Sarge to the latest release, or regenerate baseline/openclaw.json.baseline against the running OpenClaw and bump the _openclawVersion pin."
+  },
   "CM-6-unattended-not-installed": {
     "family": "CM-6 — Configuration Settings",
     "what": "unattended-upgrades package is not installed",

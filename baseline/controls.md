@@ -62,7 +62,7 @@
 - **Evidence:** Sarge gap analysis report
 
 ### CM-7: Least Functionality
-- **OpenClaw:** Disable unused plugins and tools
+- **OpenClaw:** Disable unused plugins and tools. Set `audio.transcription.command` to empty unless transcription is required.
 - **OS:** Remove or disable: telnet, rsh, vsftpd, cups, avahi-daemon. SSH: `PermitRootLogin no`
 - **Evidence:** `systemctl list-units --state=enabled`, `apt list --installed`
 

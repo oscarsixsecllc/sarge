@@ -1,6 +1,8 @@
 {
   "version": "NIST SP 800-53 Rev 5",
-  "generated": "2026-03-18",
+  "generated": "2026-09-01",
+  "baselineVersion": "0.6.0",
+  "openclawVersion": "2026.7.1-2",
   "publisher": "Oscar Six Security LLC",
   "scope": "OpenClaw deployments on Ubuntu 22.04/24.04 LTS",
   "controls": [
@@ -9,7 +11,7 @@
       "family": "AC",
       "name": "Account Management",
       "status": "full",
-      "openclaw_settings": ["agents.allowlist", "channels.*.allowedUsers"],
+      "openclaw_settings": ["agents.allowlist", "channels.*.allowedUsers", "gateway.nodes.pairing.autoApproveCidrs"],
       "os_checks": ["getent passwd", "lastlog", "who"],
       "remediation": "Remove unused accounts. Restrict OpenClaw allowlist to named users only."
     },
@@ -18,27 +20,27 @@
       "family": "AC",
       "name": "Access Enforcement",
       "status": "full",
-      "openclaw_settings": ["tools.fs.workspaceOnly", "agents.defaults.sandbox.mode"],
+      "openclaw_settings": ["tools.fs.workspaceOnly", "agents.defaults.sandbox.mode", "browser.attachOnly", "browser.noSandbox", "browser.evaluateEnabled", "hooks.allowRequestSessionKey", "hooks.allowedAgentIds", "commands.ownerAllowFrom", "gateway.controlUi.allowedOrigins", "gateway.controlUi.allowInsecureAuth", "approvals.exec.enabled", "acp.allowedAgents", "tools.codeMode.enabled", "tools.sandbox.tools.alsoAllow", "gateway.nodes.allowCommands", "gateway.nodes.denyCommands", "nodeHost.browserProxy.enabled", "nodeHost.browserProxy.allowProfiles", "crestodian.rescue.ownerDmOnly", "talk.realtime.consultRouting"],
       "os_checks": ["file permissions on ~/.openclaw/", "sudoers review"],
-      "remediation": "Set workspaceOnly=true. Set sandbox mode to all. Restrict sudoers."
+      "remediation": "Set workspaceOnly=true. Set sandbox mode to all. Restrict sudoers. Disable browser noSandbox. Set hooks.allowRequestSessionKey=false."
     },
     {
       "id": "AC-6",
       "family": "AC",
       "name": "Least Privilege",
       "status": "full",
-      "openclaw_settings": ["tools.exec.elevated", "agents.defaults.sandbox.mode"],
+      "openclaw_settings": ["tools.exec.elevated", "agents.defaults.sandbox.mode", "agents.defaults.subagents.allowChildOverrides", "gateway.terminal.enabled", "browser.evaluateEnabled"],
       "os_checks": ["sudo -l", "groups <user>"],
-      "remediation": "Disable elevated exec unless required. Confirm service account has no unnecessary group memberships."
+      "remediation": "Disable elevated exec unless required. Confirm service account has no unnecessary group memberships. Set agents.defaults.subagents.allowChildOverrides=false. Disable gateway terminal."
     },
     {
       "id": "AC-17",
       "family": "AC",
       "name": "Remote Access",
       "status": "full",
-      "openclaw_settings": ["gateway.bind", "gateway.remote.url"],
+      "openclaw_settings": ["gateway.bind", "gateway.auth.mode", "gateway.auth.rateLimit", "gateway.controlUi.allowedOrigins", "gateway.terminal.enabled", "hooks.enabled"],
       "os_checks": ["ufw status", "ss -tlnp"],
-      "remediation": "Set gateway.bind to lan. Use Cloudflare Tunnel for remote access only."
+      "remediation": "Set gateway.bind to loopback. Enable gateway.auth.mode=token. Set auth rateLimit. Disable external hooks and gateway terminal."
     },
     {
       "id": "AU-2",
@@ -63,7 +65,7 @@
       "family": "AU",
       "name": "Protection of Audit Information",
       "status": "full",
-      "openclaw_settings": [],
+      "openclaw_settings": ["agents.defaults.compaction.mode", "agents.defaults.compaction.memoryFlush.enabled", "logging.redactSensitive"],
       "os_checks": ["ls -la /var/log/audit/", "stat /var/log/audit/audit.log"],
       "remediation": "Audit logs must be owned by root, mode 600. Restrict write access."
     },
@@ -72,9 +74,18 @@
       "family": "AU",
       "name": "Audit Record Generation",
       "status": "full",
-      "openclaw_settings": ["logging.auditActions"],
+      "openclaw_settings": ["logging.auditActions", "transcripts.enabled", "transcripts.autoStart"],
       "os_checks": ["auditctl -l | grep openclaw"],
-      "remediation": "Add auditd watch rules for ~/.openclaw/secrets/ and OpenClaw config files."
+      "remediation": "Add auditd watch rules for ~/.openclaw/secrets/ and OpenClaw config files. Review transcripts.autoStart sources."
+    },
+    {
+      "id": "AU-6",
+      "family": "AU",
+      "name": "Audit Review, Analysis, and Reporting",
+      "status": "full",
+      "openclaw_settings": ["security.audit.suppressions"],
+      "os_checks": ["auditctl -l"],
+      "remediation": "Review security.audit.suppressions entries. Every suppression must be justified and periodically reviewed. Unreviewed suppressions create blind spots."
     },
     {
       "id": "CM-2",
@@ -90,18 +101,18 @@
       "family": "CM",
       "name": "Configuration Settings",
       "status": "full",
-      "openclaw_settings": ["tools.fs.workspaceOnly", "agents.defaults.sandbox.mode", "gateway.bind"],
+      "openclaw_settings": ["tools.fs.workspaceOnly", "agents.defaults.sandbox.mode", "gateway.bind", "models.mode", "session.dmScope", "messages.groupChat.visibleReplies", "cron.maxConcurrentRuns"],
       "os_checks": ["ufw status verbose", "sshd -T | grep -i permit"],
-      "remediation": "Apply all settings in openclaw.json.baseline. Apply all Sarge hardening scripts."
+      "remediation": "Apply all settings in openclaw.json.baseline. Apply all Sarge hardening scripts. Verify models.mode, session.dmScope, and cron settings match baseline."
     },
     {
       "id": "CM-7",
       "family": "CM",
       "name": "Least Functionality",
       "status": "full",
-      "openclaw_settings": ["plugins.enabled", "tools.enabled"],
+      "openclaw_settings": ["plugins.entries", "plugins.slots", "tools.web", "tools.codeMode.enabled", "skills.entries", "skills.workshop.approvalPolicy", "skills.install.allowUploadedArchives", "skills.load.allowSymlinkTargets", "browser.enabled", "browser.evaluateEnabled", "browser.ssrfPolicy", "mcp.servers", "discovery.mdns.mode", "gateway.http.endpoints.chatCompletions.enabled", "gateway.http.endpoints.responses.enabled", "gateway.tools.deny", "gateway.tools.allow", "commitments.enabled", "security.installPolicy.enabled", "marketplaces.feeds", "marketplaces.sources", "audio.transcription.command"],
       "os_checks": ["systemctl list-units --state=enabled", "apt list --installed"],
-      "remediation": "Disable unused OpenClaw plugins and tools. Remove unnecessary OS packages."
+      "remediation": "Disable unused OpenClaw plugins, skills, and tools. Set skills.workshop.approvalPolicy=review. Disable browser unless needed. Set discovery.mdns.mode=minimal. Remove unnecessary OS packages."
     },
     {
       "id": "IA-2",
@@ -117,7 +128,7 @@
       "family": "IA",
       "name": "Authenticator Management",
       "status": "full",
-      "openclaw_settings": [],
+      "openclaw_settings": ["auth.profiles", "auth.order", "auth.cooldowns", "secrets.providers", "gateway.auth.token"],
       "os_checks": ["grep minlen /etc/security/pwquality.conf", "grep PASS_MAX_DAYS /etc/login.defs"],
       "remediation": "Set pwquality minlen=12, complexity rules. Set PASS_MAX_DAYS=90, PASS_MIN_DAYS=1."
     },
@@ -134,8 +145,8 @@
       "id": "SC-8",
       "family": "SC",
       "name": "Transmission Confidentiality and Integrity",
-      "status": "partial",
-      "openclaw_settings": ["gateway.tls", "gateway.remote.url"],
+      "status": "full",
+      "openclaw_settings": ["gateway.tls.enabled", "gateway.controlUi.allowInsecureAuth", "mcp.servers"],
       "os_checks": ["ss -tlnp", "openssl s_client -connect localhost:18790"],
       "remediation": "Enable TLS on gateway. Use Cloudflare Tunnel (TLS enforced) for all remote access."
     },
@@ -143,8 +154,8 @@
       "id": "SC-28",
       "family": "SC",
       "name": "Protection of Information at Rest",
-      "status": "partial",
-      "openclaw_settings": [],
+      "status": "full",
+      "openclaw_settings": ["memory.encryption", "secrets.providers", "logging.redactSensitive", "diagnostics.otel.captureContent.enabled", "diagnostics.cacheTrace.enabled", "env", "media.preserveFilenames", "media.ttlHours"],
       "os_checks": ["stat ~/.openclaw/secrets/", "ls -la ~/.openclaw/"],
       "remediation": "Secrets directory must be 700. All secret files must be 600. Owner must be service account only."
     },
@@ -156,6 +167,114 @@
       "openclaw_settings": [],
       "os_checks": ["apt list --upgradable", "unattended-upgrades --dry-run"],
       "remediation": "Enable unattended-upgrades for security patches. Review and apply pending updates."
+    },
+    {
+      "id": "AC-4",
+      "family": "AC",
+      "name": "Information Flow Enforcement",
+      "status": "full",
+      "openclaw_settings": ["session.dmScope", "messages.groupChat.visibleReplies", "tools.web.search.enabled", "tools.web.fetch.enabled", "diagnostics.otel.captureContent.enabled", "broadcast.strategy", "acp.stream.maxOutputChars", "surfaces.*.silentReply"],
+      "os_checks": [],
+      "remediation": "Set session.dmScope to per-channel-peer. Review tools.web settings. Disable diagnostics.otel.captureContent unless the collector is within your data boundary."
+    },
+    {
+      "id": "AC-7",
+      "family": "AC",
+      "name": "Unsuccessful Logon Attempts",
+      "status": "full",
+      "openclaw_settings": ["gateway.auth.rateLimit.maxAttempts", "gateway.auth.rateLimit.windowMs", "gateway.auth.rateLimit.lockoutMs", "auth.cooldowns"],
+      "os_checks": ["pam_faillock status"],
+      "remediation": "Configure gateway.auth.rateLimit with maxAttempts=10, windowMs=60000, lockoutMs=300000. Configure PAM faillock."
+    },
+    {
+      "id": "AC-12",
+      "family": "AC",
+      "name": "Session Termination",
+      "status": "full",
+      "openclaw_settings": ["mcp.sessionIdleTtlMs", "agents.defaults.subagents.archiveAfterMinutes", "cron.sessionRetention", "acp.runtime.ttlMinutes", "crestodian.rescue.pendingTtlMinutes"],
+      "os_checks": [],
+      "remediation": "Set mcp.sessionIdleTtlMs to 600000 (10 min). Set subagents.archiveAfterMinutes to 60. Review cron.sessionRetention."
+    },
+    {
+      "id": "CM-3",
+      "family": "CM",
+      "name": "Configuration Change Control",
+      "status": "full",
+      "openclaw_settings": ["gateway.reload.mode", "update.auto.enabled", "commands.restart"],
+      "os_checks": [],
+      "remediation": "Set gateway.reload.mode to hybrid. Disable update.auto unless stableDelayHours >= 6. Review restart command availability."
+    },
+    {
+      "id": "CM-5",
+      "family": "CM",
+      "name": "Access Restrictions for Change",
+      "status": "full",
+      "openclaw_settings": ["skills.workshop.approvalPolicy", "skills.install.allowUploadedArchives", "skills.workshop.allowSymlinkTargetWrites", "plugins.entries"],
+      "os_checks": [],
+      "remediation": "Set skills.workshop.approvalPolicy to review. Disable allowUploadedArchives and allowSymlinkTargetWrites. Review plugin entries for hooks.allowPromptInjection."
+    },
+    {
+      "id": "SC-5",
+      "family": "SC",
+      "name": "Denial-of-Service Protection",
+      "status": "full",
+      "openclaw_settings": ["models.rateLimit", "agents.defaults.maxConcurrent", "agents.defaults.subagents.maxConcurrent", "cron.maxConcurrentRuns", "gateway.auth.rateLimit", "acp.maxConcurrentSessions", "acp.stream.maxOutputChars", "audio.transcription.timeoutSeconds"],
+      "os_checks": ["ufw status"],
+      "remediation": "Set per-model rate limits. Bound maxConcurrent to 4 for agents, 8 for subagents. Set cron.maxConcurrentRuns to 8."
+    },
+    {
+      "id": "SC-7",
+      "family": "SC",
+      "name": "Boundary Protection",
+      "status": "full",
+      "openclaw_settings": ["browser.ssrfPolicy.dangerouslyAllowPrivateNetwork", "gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback", "discovery.mdns.mode", "hooks.enabled", "gateway.tailscale.mode", "proxy.enabled", "proxy.loopbackMode", "nodeHost.browserProxy.enabled", "web.enabled"],
+      "os_checks": ["ufw status", "ss -tlnp"],
+      "remediation": "Set browser.ssrfPolicy.dangerouslyAllowPrivateNetwork=false. Set discovery.mdns.mode=minimal. Disable external hooks unless required."
+    },
+    {
+      "id": "SI-4",
+      "family": "SI",
+      "name": "Information System Monitoring",
+      "status": "full",
+      "openclaw_settings": ["diagnostics.enabled", "audit.enabled", "cron.failureAlert.enabled", "security.audit.suppressions"],
+      "os_checks": ["systemctl status auditd"],
+      "remediation": "Enable diagnostics, audit, and cron.failureAlert. Enable auditd on the host. Review security.audit.suppressions for blind spots."
+    },
+    {
+      "id": "CP-10",
+      "family": "CP",
+      "name": "System Recovery and Reconstitution",
+      "status": "full",
+      "openclaw_settings": ["crestodian.rescue.enabled", "crestodian.rescue.ownerDmOnly", "crestodian.rescue.pendingTtlMinutes"],
+      "os_checks": [],
+      "remediation": "If rescue mode is enabled, restrict to ownerDmOnly=true. Set pendingTtlMinutes to a short window (5 min default) to prevent stale rescue state."
+    },
+    {
+      "id": "CA-7",
+      "family": "CA",
+      "name": "Continuous Monitoring",
+      "status": "full",
+      "openclaw_settings": ["security.installPolicy.enabled", "security.audit.suppressions", "diagnostics.enabled"],
+      "os_checks": ["systemctl status auditd", "unattended-upgrades --dry-run"],
+      "remediation": "Enable security.installPolicy. Review audit suppressions. Enable diagnostics."
+    },
+    {
+      "id": "SI-17",
+      "family": "SI",
+      "name": "Fail-Safe Procedures",
+      "status": "full",
+      "openclaw_settings": ["cron.retry.maxAttempts", "crestodian.rescue.enabled", "crestodian.rescue.pendingTtlMinutes"],
+      "os_checks": [],
+      "remediation": "Bound cron retry.maxAttempts. If crestodian rescue is enabled, set short pendingTtlMinutes."
+    },
+    {
+      "id": "SI-12",
+      "family": "SI",
+      "name": "Information Management and Retention",
+      "status": "full",
+      "openclaw_settings": ["agents.defaults.compaction.mode", "agents.defaults.compaction.memoryFlush.enabled", "agents.defaults.compaction.truncateAfterCompaction", "transcripts.enabled", "transcripts.maxUtterances", "media.ttlHours"],
+      "os_checks": [],
+      "remediation": "Set compaction.mode to safeguard. Enable memoryFlush and truncateAfterCompaction. Review transcripts.maxUtterances and media.ttlHours retention bounds. Review compaction thresholds on CM-2 baseline cadence."
     },
     {
       "id": "SI-3",
