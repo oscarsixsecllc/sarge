@@ -805,5 +805,61 @@
     "why": "Per feedback_cron_jobs_need_gate_registration.md, unregistered crons cost 266 false-positive taint promotions before the gap was noticed. CM-6 (config settings) requires the enforcement config to be complete for the assets it protects, and AU-2 needs the cron identity in the audit trail.",
     "fix": "For each flagged crontab line, add a CRON_JOB_NAME assignment (e.g. `CRON_JOB_NAME=my-cadence /path/to/script.sh`) and a matching entry in ~/.openclaw/state/tool-gate/cron-trust.json with the right tier gate.",
     "scope": "agent"
+  },
+  "SA-9-external-mcp-servers": {
+    "family": "SA-9 — External System Services",
+    "what": "One or more external MCP servers / API dependencies are configured under mcp.servers in the live OpenClaw config",
+    "expected": "Every configured MCP server has a documented data-sharing agreement / risk review, or is removed if no longer needed",
+    "why": "SA-9 requires organizations to identify external system services and the risks they introduce before relying on them. Each MCP server is a trust boundary the agent reaches across at runtime; an unreviewed server can exfiltrate data or be a supply-chain pivot point.",
+    "fix": "Review each listed MCP server's URL/provider for a data-sharing agreement and least-privilege scope. Remove entries from mcp.servers that are no longer required.",
+    "scope": "agent"
+  },
+  "SA-22-ubuntu-eol": {
+    "family": "SA-22 — Unsupported System Components",
+    "what": "The host's Ubuntu release is past end-of-life, or within 6 months of reaching it",
+    "expected": "Running an Ubuntu LTS release with more than 6 months of standard support remaining",
+    "why": "SA-22 prohibits running unsupported system components — once a release passes EOL, it stops receiving security patches, so any newly disclosed kernel or userspace CVE goes unfixed indefinitely.",
+    "fix": "Plan an in-place upgrade to the next Ubuntu LTS release (sudo do-release-upgrade) well before the EOL date.",
+    "scope": "host"
+  },
+  "SA-22-node-eol": {
+    "family": "SA-22 — Unsupported System Components",
+    "what": "The installed Node.js major version is past end-of-life, or within 6 months of reaching it",
+    "expected": "Running a Node.js major version with more than 6 months of upstream support remaining",
+    "why": "SA-22 prohibits running unsupported system components — Node.js majors stop receiving security backports after EOL, and OpenClaw's runtime depends on Node for the gateway and MCP tooling.",
+    "fix": "Upgrade to a currently supported Node.js LTS line (e.g. via nvm: nvm install --lts && nvm alias default lts/*).",
+    "scope": "host"
+  },
+  "MP-6-media-ttl": {
+    "family": "MP-6 — Media Sanitization",
+    "what": "media.ttlHours is unset or 0 in the live OpenClaw config",
+    "expected": "media.ttlHours set to a positive value defining how long generated/received media is retained before cleanup",
+    "why": "MP-6 requires media to be sanitized before it's no longer needed. Without a TTL, images/audio/video/downloads the agent handles accumulate on disk indefinitely, expanding the blast radius of a later compromise.",
+    "fix": "Set media.ttlHours to a positive retention window in openclaw.json (e.g. 24-168 depending on workflow needs) and restart the gateway.",
+    "scope": "agent"
+  },
+  "MP-6-media-max-size": {
+    "family": "MP-6 — Media Sanitization",
+    "what": "media.maxSizeMb is not set in the live OpenClaw config",
+    "expected": "media.maxSizeMb set to a bounded value",
+    "why": "Even with a TTL configured, an unbounded max size lets a burst of large media sit at rest for the full retention window, increasing both storage exposure and the amount of sensitive content a compromise could reach. Secondary indicator for MP-6.",
+    "fix": "Set media.maxSizeMb to a reasonable ceiling in openclaw.json based on expected media workflows.",
+    "scope": "agent"
+  },
+  "SR-11-skill-attribution": {
+    "family": "SR-11 — Component Authenticity",
+    "what": "One or more installed skills under the skills directory have no source/author/origin/publisher metadata in SKILL.md",
+    "expected": "Every installed skill's SKILL.md declares where it came from (source, origin, author, or publisher)",
+    "why": "SR-11 requires verifying the authenticity of system components before they're trusted. A skill with no attribution can't be traced back to a maintainer or reviewed for tampering — exactly the supply-chain blind spot SR-11 targets.",
+    "fix": "Add a source/author/origin field to the SKILL.md front matter for each flagged skill, or remove skills that can't be attributed.",
+    "scope": "agent"
+  },
+  "SR-11-apt-signing-keys": {
+    "family": "SR-11 — Component Authenticity",
+    "what": "No APT trusted GPG key files found under /etc/apt/trusted.gpg.d/ (or the legacy /etc/apt/trusted.gpg keyring)",
+    "expected": "At least one trusted GPG key file present so apt can verify package signatures",
+    "why": "SR-11 requires verifying component authenticity through the supply chain; APT's GPG keyring is the mechanism that lets the package manager reject tampered or unsigned .deb packages before install.",
+    "fix": "Reinstall the distribution's default keyring package (ubuntu-keyring) or re-add trusted keys for configured third-party repositories.",
+    "scope": "host"
   }
 }

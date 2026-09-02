@@ -122,6 +122,15 @@
       "remediation": "Add auditd watch rules for ~/.openclaw/secrets/ and OpenClaw config files."
     },
     {
+      "id": "CA-9",
+      "family": "CA",
+      "name": "Internal System Connections",
+      "status": "partial",
+      "openclaw_settings": ["mcp.servers"],
+      "os_checks": ["parse ~/.openclaw/openclaw.json mcp.servers"],
+      "remediation": "Document each MCP server connection in the system security plan / interconnection agreements. Remove any unused or unauthorized servers."
+    },
+    {
       "id": "CM-2",
       "family": "CM",
       "name": "Baseline Configuration",
@@ -147,6 +156,15 @@
       "openclaw_settings": ["plugins.enabled", "tools.enabled"],
       "os_checks": ["systemctl list-units --state=enabled", "apt list --installed"],
       "remediation": "Disable unused OpenClaw plugins and tools. Remove unnecessary OS packages."
+    },
+    {
+      "id": "CP-9",
+      "family": "CP",
+      "name": "System Backup",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["crontab -l | grep -i backup", "systemctl list-timers --all | grep -i backup"],
+      "remediation": "Configure a scheduled backup (cron or systemd timer) of ~/.openclaw config, secrets, and workspace state. Verify backups are recoverable."
     },
     {
       "id": "IA-2",
@@ -246,6 +264,60 @@
       "openclaw_settings": [],
       "os_checks": ["which clamav", "systemctl status clamav-daemon"],
       "remediation": "Install and configure ClamAV or equivalent. Schedule regular scans."
+    },
+    {
+      "id": "SI-7",
+      "family": "SI",
+      "name": "Software, Firmware, and Information Integrity",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["apt-config dump | grep -i AllowUnauthenticated", "ls /etc/apt/trusted.gpg.d/"],
+      "remediation": "Ensure APT::Get::AllowUnauthenticated is unset or false. Verify apt repository GPG keys are configured under /etc/apt/trusted.gpg.d/."
+    },
+    {
+      "id": "SI-16",
+      "family": "SI",
+      "name": "Memory Protection",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": ["cat /proc/sys/kernel/randomize_va_space"],
+      "remediation": "Set kernel.randomize_va_space=2 for full ASLR: sudo sysctl -w kernel.randomize_va_space=2."
+    },
+    {
+      "id": "SA-9",
+      "family": "SA",
+      "name": "External System Services",
+      "status": "partial",
+      "openclaw_settings": ["mcp.servers"],
+      "os_checks": [],
+      "remediation": "Review each configured mcp.servers entry for a data-sharing agreement and supply-chain risk assessment. Remove servers that are no longer needed."
+    },
+    {
+      "id": "SA-22",
+      "family": "SA",
+      "name": "Unsupported System Components",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["cat /etc/os-release", "node --version"],
+      "remediation": "Upgrade Ubuntu and Node.js before their end-of-life dates. Track EOL schedules at https://endoflife.date/ubuntu and https://endoflife.date/nodejs."
+    },
+    {
+      "id": "MP-6",
+      "family": "MP",
+      "name": "Media Sanitization",
+      "status": "partial",
+      "openclaw_settings": ["media.ttlHours", "media.maxSizeMb"],
+      "os_checks": [],
+      "remediation": "Set media.ttlHours to a positive retention window and media.maxSizeMb to bound stored media size in the OpenClaw config."
+    },
+    {
+      "id": "SR-11",
+      "family": "SR",
+      "name": "Component Authenticity",
+      "status": "partial",
+      "openclaw_settings": [],
+      "os_checks": ["ls ~/.openclaw/skills", "ls /etc/apt/trusted.gpg.d/"],
+      "remediation": "Add source/author/origin metadata to installed skills. Verify APT package signing keys are present under /etc/apt/trusted.gpg.d/."
     }
   ]
 }

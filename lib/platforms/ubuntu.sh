@@ -286,6 +286,29 @@ ubuntu_fail2ban_status() {
 # Caller is responsible for `cd`'ing to the repo root before calling.
 ubuntu_verify_checksums() { sha256sum --check "$1" --quiet 2>/dev/null; }
 
+# 0 if apt is available at all (gates the SI-7 package-integrity checks).
+ubuntu_apt_config_available() { command -v apt-config &>/dev/null; }
+
+# Value of APT::Get::AllowUnauthenticated, lowercased. Empty if unset —
+# apt treats unset the same as "false" (signature checks enforced).
+ubuntu_apt_allow_unauthenticated() {
+  apt-config dump 2>/dev/null | grep -i "AllowUnauthenticated" | awk -F'"' '{print $2}' | tr '[:upper:]' '[:lower:]'
+}
+
+# Count of trusted apt GPG keyring files (modern /etc/apt/trusted.gpg.d/
+# *.gpg plus the legacy single-file /etc/apt/trusted.gpg, if present).
+# Always prints a single integer.
+ubuntu_apt_trusted_keys_count() {
+  local count=0
+  count=$(find /etc/apt/trusted.gpg.d -maxdepth 1 -name "*.gpg" 2>/dev/null | wc -l | tr -d '[:space:]')
+  [[ -f /etc/apt/trusted.gpg ]] && count=$((count + 1))
+  echo "$count"
+}
+
+# Value of /proc/sys/kernel/randomize_va_space: 2=full ASLR, 1=partial,
+# 0=disabled. Empty if the file doesn't exist (non-Linux, exotic kernel).
+ubuntu_aslr_setting() { cat /proc/sys/kernel/randomize_va_space 2>/dev/null; }
+
 # ---------- Drift (CM-2) ----------
 #
 # Emits the platform-specific "fields" block consumed by drift/snapshot.sh
@@ -307,6 +330,7 @@ ubuntu_verify_checksums() { sha256sum --check "$1" --quiet 2>/dev/null; }
 _ubuntu_drift_fields() {
   local ufw auditd f2b perm pmd log_free ntp_sync disk_full_action rotate_count
   local dup_uid_count ssh_protocol_1 ia_oc_config auth_mode session_idle_ttl
+  local aslr apt_allow_unauth
   ufw=$(ufw status 2>/dev/null | head -1) || true
   auditd=$(systemctl is-active auditd 2>/dev/null) || true
   f2b=$(systemctl is-active fail2ban 2>/dev/null) || true
@@ -350,6 +374,40 @@ _ubuntu_drift_fields() {
   echo "ssh_protocol_1_configured=${ssh_protocol_1:-unknown}"
   echo "gateway_auth_mode=${auth_mode:-unknown}"
   echo "gateway_session_idle_ttl_ms=${session_idle_ttl:-unknown}"
+  # SI-16: ASLR setting (memory protection)
+  aslr=$(ubuntu_aslr_setting) || true
+  echo "aslr_setting=${aslr:-unknown}"
+  # SI-7: apt unauthenticated-package allowance
+  apt_allow_unauth=$(ubuntu_apt_allow_unauthenticated) || true
+  echo "apt_allow_unauthenticated=${apt_allow_unauth:-unknown}"
+  # SA-22: OS + Node.js runtime versions (EOL tracking inputs)
+  echo "os_version=${SARGE_OS_VERSION:-unknown}"
+  echo "node_version=$(node --version 2>/dev/null | tr -d 'v')"
+  # SA-9: external MCP server count. Same openclaw.json -> config.json
+  # fallback used by check-sa.sh / check-ia.sh (issue #61).
+  local sa_oc_config mcp_server_count
+  for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+    if [[ -f "$candidate" ]]; then
+      sa_oc_config="$candidate"
+      break
+    fi
+  done
+  if [[ -n "${sa_oc_config:-}" ]]; then
+    if command -v jq &>/dev/null; then
+      mcp_server_count=$(jq -r '(.mcp.servers // {}) | to_entries | map(select(.key | startswith("_") | not)) | length' "$sa_oc_config" 2>/dev/null)
+    fi
+  fi
+  echo "mcp_external_server_count=${mcp_server_count:-unknown}"
+  # MP-6: media retention TTL
+  local media_ttl
+  if [[ -n "${sa_oc_config:-}" ]]; then
+    media_ttl=$(grep -oE '"ttlHours"[[:space:]]*:[[:space:]]*[0-9]+' "$sa_oc_config" 2>/dev/null | grep -oE '[0-9]+$' | head -1) || true
+  fi
+  echo "media_ttl_hours=${media_ttl:-unknown}"
+  # SR-11: apt trusted-key count (reuses SI-7's probe)
+  local apt_trusted_keys
+  apt_trusted_keys=$(ubuntu_apt_trusted_keys_count) || true
+  echo "apt_trusted_keys_count=${apt_trusted_keys:-unknown}"
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in
