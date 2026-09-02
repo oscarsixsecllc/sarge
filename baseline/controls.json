@@ -686,6 +686,19 @@
         "npm list -g --depth=0"
       ],
       "remediation": "Review globally-installed npm packages and remove any that are not approved for the host."
+    },
+    {
+      "id": "RA-5",
+      "family": "RA",
+      "name": "Vulnerability Monitoring and Scanning",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": [
+        "trivy/grype/oscap/lynis/debsecan",
+        "npm audit",
+        "apt list --upgradable"
+      ],
+      "remediation": "Install a vulnerability scanner (trivy or grype recommended). Run npm audit on OpenClaw dependencies. Apply pending OS security patches."
     }
   ]
 }

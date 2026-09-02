@@ -1069,5 +1069,33 @@
     "expected": "Agent runs in a separate network namespace or has firewall-restricted access",
     "why": "Sharing the host network namespace gives the agent access to all host network interfaces, including internal/management networks. Network namespace isolation limits the agent's network surface.",
     "fix": "Run OpenClaw in a container with a dedicated network namespace, or use iptables/nftables to restrict the agent user's network access."
+  },
+  "RA-5-scanner-installed": {
+    "family": "RA-5 \u2014 Vulnerability Monitoring and Scanning",
+    "what": "No vulnerability scanner installed on the host",
+    "expected": "At least one scanner available (trivy, grype, oscap, lynis, or debsecan)",
+    "why": "NIST 800-53 RA-5 requires automated vulnerability scanning. Without a scanner, vulnerabilities in system packages and configurations go undetected until exploited.",
+    "fix": "Install trivy (recommended for container/OS scanning): curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh"
+  },
+  "RA-5-scan-evidence": {
+    "family": "RA-5 \u2014 Vulnerability Monitoring and Scanning",
+    "what": "No recent vulnerability scan results found (within 30 days)",
+    "expected": "Recent scan output in ~/.openclaw/scans/, /var/log/trivy/, or equivalent",
+    "why": "RA-5 requires scanning at an organization-defined frequency. A 30-day window without evidence suggests scanning has lapsed or results are not being retained.",
+    "fix": "Run a vulnerability scan and store results: trivy fs --scanners vuln / --output ~/.openclaw/scans/$(date +%Y%m%d).json --format json"
+  },
+  "RA-5-npm-audit": {
+    "family": "RA-5 \u2014 Vulnerability Monitoring and Scanning",
+    "what": "Known vulnerabilities found in OpenClaw npm dependencies",
+    "expected": "Zero critical/high vulnerabilities in npm audit",
+    "why": "OpenClaw's Node.js dependencies are part of the agent's attack surface. Known vulnerabilities in these packages can be exploited by malicious inputs or compromised upstream packages.",
+    "fix": "cd /usr/lib/node_modules/openclaw && npm audit fix"
+  },
+  "RA-5-os-security-patches": {
+    "family": "RA-5 \u2014 Vulnerability Monitoring and Scanning",
+    "what": "OS security patches are pending",
+    "expected": "All available security patches applied",
+    "why": "Pending security patches represent known vulnerabilities with available fixes. Delaying application increases the window of exposure.",
+    "fix": "sudo apt update && sudo apt upgrade -y"
   }
 }
