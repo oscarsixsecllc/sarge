@@ -415,6 +415,45 @@
       "remediation": "Use OpenSSL 1.1+ or 3.x for FIPS capability. Node.js 18+ enforces TLS 1.2+ by default."
     },
     {
+      "id": "SC-15",
+      "family": "SC",
+      "name": "Collaborative Computing Devices",
+      "status": "full",
+      "openclaw_settings": [
+        "nodes.*.capabilities.camera",
+        "nodes.*.capabilities.microphone"
+      ],
+      "os_checks": [
+        "v4l2-ctl --list-devices",
+        "ls /dev/video*"
+      ],
+      "remediation": "Disable camera/microphone capabilities in openclaw.json unless required. Remove /dev/video* access for the agent user."
+    },
+    {
+      "id": "SC-23",
+      "family": "SC",
+      "name": "Session Authenticity",
+      "status": "full",
+      "openclaw_settings": [
+        "auth.enabled",
+        "gatewayToken"
+      ],
+      "os_checks": [],
+      "remediation": "Set auth.enabled: true and configure a strong gatewayToken in openclaw.json."
+    },
+    {
+      "id": "SC-39",
+      "family": "SC",
+      "name": "Process Isolation",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": [
+        "cat /proc/PID/cgroup",
+        "readlink /proc/PID/ns/{pid,net,mnt}"
+      ],
+      "remediation": "Run OpenClaw in a container or systemd slice with resource limits. Use network and PID namespaces to isolate the agent."
+    },
+    {
       "id": "SI-2",
       "family": "SI",
       "name": "Flaw Remediation",

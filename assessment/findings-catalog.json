@@ -1020,5 +1020,54 @@
     "expected": "Node.js 18+ (uses OpenSSL 3.x, TLS 1.2+ default min)",
     "why": "Node.js versions below 18 use OpenSSL 1.x and may negotiate TLS 1.0/1.1, which have known weaknesses. NIST 800-53 SC-13 requires approved cryptographic mechanisms.",
     "fix": "Upgrade to Node.js 18 LTS or later."
+  },
+  "SC-15-device-access": {
+    "family": "SC-15 \u2014 Collaborative Computing Devices",
+    "what": "Camera, microphone, or screen capture capabilities are enabled for the agent",
+    "expected": "Device capabilities disabled unless explicitly required by the agent's mission",
+    "why": "NIST 800-53 SC-15 requires controlling remote activation of collaborative computing devices. An AI agent with camera/mic access can capture environmental data beyond its intended scope.",
+    "fix": "Remove camera/microphone/screen capabilities from the agent's openclaw.json configuration unless operationally required."
+  },
+  "SC-15-video-devices": {
+    "family": "SC-15 \u2014 Collaborative Computing Devices",
+    "what": "Video capture hardware detected on the host",
+    "expected": "No video devices accessible to the agent, or access explicitly authorized",
+    "why": "Physical video capture devices connected to an agent host expand the agent's potential data collection surface. Verify the agent's access to /dev/video* is intentional.",
+    "fix": "Remove the agent user from the 'video' group, or physically disconnect the camera if not needed."
+  },
+  "SC-23-auth-enabled": {
+    "family": "SC-23 \u2014 Session Authenticity",
+    "what": "OpenClaw authentication is not enabled or not explicitly configured",
+    "expected": "auth.enabled set to true in openclaw.json",
+    "why": "NIST 800-53 SC-23 requires authenticating sessions. Without auth, anyone with network access to the gateway port can create sessions and issue commands to the agent.",
+    "fix": "Set auth.enabled: true in openclaw.json and configure appropriate authentication providers."
+  },
+  "SC-23-gateway-token": {
+    "family": "SC-23 \u2014 Session Authenticity",
+    "what": "No gateway token configured for API access",
+    "expected": "gatewayToken set in openclaw.json",
+    "why": "The gateway token is the primary authentication mechanism for programmatic API access. Without it, the gateway API is open to any caller on the network.",
+    "fix": "Generate a strong random token and set gatewayToken in openclaw.json."
+  },
+  "SC-39-cgroup-isolation": {
+    "family": "SC-39 \u2014 Process Isolation",
+    "what": "OpenClaw process is not in a scoped cgroup or container",
+    "expected": "Agent process runs in a dedicated cgroup slice or container with resource limits",
+    "why": "NIST 800-53 SC-39 requires maintaining separate execution domains. Without cgroup isolation, the agent process can consume unlimited host resources and is not bounded by CPU/memory/IO limits.",
+    "fix": "Run OpenClaw under a systemd slice (systemd-run --scope --slice=openclaw) or in a container with resource limits."
+  },
+  "SC-39-pid-namespace": {
+    "family": "SC-39 \u2014 Process Isolation",
+    "what": "OpenClaw shares the host PID namespace",
+    "expected": "Agent runs in a separate PID namespace",
+    "why": "Sharing the host PID namespace allows the agent to see and potentially signal all host processes. PID namespace isolation limits the agent's process visibility to its own subtree.",
+    "fix": "Run OpenClaw in a container or with unshare --pid to isolate its process namespace."
+  },
+  "SC-39-net-namespace": {
+    "family": "SC-39 \u2014 Process Isolation",
+    "what": "OpenClaw shares the host network namespace",
+    "expected": "Agent runs in a separate network namespace or has firewall-restricted access",
+    "why": "Sharing the host network namespace gives the agent access to all host network interfaces, including internal/management networks. Network namespace isolation limits the agent's network surface.",
+    "fix": "Run OpenClaw in a container with a dedicated network namespace, or use iptables/nftables to restrict the agent user's network access."
   }
 }
