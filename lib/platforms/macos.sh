@@ -303,6 +303,9 @@ _macos_drift_fields() {
   echo "ssh_protocol_1_configured=${ssh_protocol_1:-unknown}"
   echo "gateway_auth_mode=${auth_mode:-unknown}"
   echo "gateway_session_idle_ttl_ms=${session_idle_ttl:-unknown}"
+
+  # OpenClaw config surface (shared across platforms, defined in _dispatch.sh)
+  _sarge_openclaw_config_drift_fields
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in

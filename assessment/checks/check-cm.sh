@@ -6,10 +6,57 @@ SARGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # CM-2: Baseline configuration documented
 log "CM-2: Baseline configuration"
-if [[ -f "$SARGE_DIR/baseline/openclaw.json.baseline" ]]; then
+BASELINE_FILE="$SARGE_DIR/baseline/openclaw.json.baseline"
+if [[ -f "$BASELINE_FILE" ]]; then
   passx "CM-2-no-baseline" "CM-2: Sarge baseline config file exists"
+
+  # CM-2: Baseline schema-version pin (issue #63). The baseline should
+  # declare which OpenClaw release its schema was authored against so
+  # drift tooling can refuse or warn on stale comparisons. Uses python3
+  # (available on every supported platform) to avoid a jq dependency.
+  BASELINE_OC_VER=$(python3 -c "
+import json, sys
+try:
+    with open('$BASELINE_FILE') as fh:
+        cfg = json.load(fh)
+    print(cfg.get('_openclawVersion', ''))
+except Exception:
+    print('')
+" 2>/dev/null)
+
+  if [[ -z "$BASELINE_OC_VER" ]]; then
+    warnx "CM-2-baseline-version-pin-missing" "CM-2: baseline is missing _openclawVersion schema-version pin"
+  else
+    passx "CM-2-baseline-version-pin-missing" "CM-2: baseline pins _openclawVersion=${BASELINE_OC_VER}"
+
+    # CM-2: Compare pinned version against the running OpenClaw. Skip
+    # cleanly when openclaw is not on PATH (Sarge can run against a
+    # non-OpenClaw host too). Extract the version token; `openclaw --version`
+    # emits "OpenClaw 2026.7.1-2 (hash)" — take field 2.
+    if command -v openclaw &>/dev/null; then
+      RUNNING_OC_VER=$(openclaw --version 2>/dev/null | awk 'NR==1 {print $2}')
+      if [[ -z "$RUNNING_OC_VER" ]]; then
+        warnx "CM-2-baseline-version-drift" "CM-2: could not parse running OpenClaw version (openclaw --version output unexpected)"
+      else
+        # Compare major.minor. Format: YYYY.M[.P[-B]] — split on dot,
+        # take first two fields. Different major or minor > 1 apart = drift.
+        _oc_ver_parts() {
+          echo "$1" | awk -F'[.-]' '{printf "%s %s\n", $1, $2}'
+        }
+        read -r B_MAJ B_MIN < <(_oc_ver_parts "$BASELINE_OC_VER")
+        read -r R_MAJ R_MIN < <(_oc_ver_parts "$RUNNING_OC_VER")
+        if [[ "$B_MAJ" != "$R_MAJ" ]]; then
+          warnx "CM-2-baseline-version-drift" "CM-2: baseline pin ($BASELINE_OC_VER) and running OpenClaw ($RUNNING_OC_VER) differ in major version — regenerate baseline"
+        elif [[ -n "$B_MIN" && -n "$R_MIN" ]] && (( B_MIN > R_MIN + 1 || R_MIN > B_MIN + 1 )); then
+          warnx "CM-2-baseline-version-drift" "CM-2: baseline pin ($BASELINE_OC_VER) and running OpenClaw ($RUNNING_OC_VER) differ by more than one minor release — regenerate baseline"
+        else
+          passx "CM-2-baseline-version-drift" "CM-2: baseline pin ($BASELINE_OC_VER) is within one minor of running OpenClaw ($RUNNING_OC_VER)"
+        fi
+      fi
+    fi
+  fi
 else
-  warnx "CM-2-no-baseline" "CM-2: No Sarge baseline found at $SARGE_DIR/baseline/openclaw.json.baseline"
+  warnx "CM-2-no-baseline" "CM-2: No Sarge baseline found at $BASELINE_FILE"
 fi
 
 # CM-6: Unattended security upgrades

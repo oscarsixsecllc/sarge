@@ -1,16 +1,83 @@
 {
-  "_comment": "Sarge Hardened OpenClaw Baseline — NIST 800-53 Rev 5 + Oscar Six Agent-Safety Overlay",
-  "_version": "0.2.0",
+  "_comment": "Sarge Hardened OpenClaw Baseline --NIST 800-53 Rev 5 + Oscar Six Agent-Safety Overlay",
+  "_version": "0.6.0",
+  "_openclawVersion": "2026.7.1-2",
+  "_openclawVersion_note": "Schema-version pin. Sarge drift detection gates on this: refuse comparison when the running OpenClaw is more than one minor behind this pin.",
   "_publisher": "Oscar Six Security LLC",
-  "_updated": "2026-08-29",
-  "_schema_notes": "Baseline refreshed against OpenClaw 2026.7.x live schema. Sections added since v0.1: approvalPolicy (via approvals), hooks, subagents (via agents.subagents), workshop (via skills.workshop), compaction (via session.compaction), rateLimit (via models.rateLimit), auth.profiles, mcp.servers, browser, sandboxes (via agents.defaults.sandbox + sandboxes top-level), workboard (via plugins.workboard). See DECISIONS.md 2026-08-29 entry for the section-mapping decisions.",
+  "_updated": "2026-09-01",
+  "_schema_notes": "Full-surface baseline covering all security-relevant OpenClaw 2026.7.1-2 config schema keys. v0.6.0 adds: audio (transcription exec surface), surfaces (per-surface reply visibility). Sections without security relevance (cli, tui, ui) are intentionally omitted. Each section maps to one or more 800-53 control IDs.",
 
   "gateway": {
-    "bind": "lan",
-    "_bind_control": "AC-17: Remote access restricted to LAN. Use Cloudflare Tunnel for external.",
-    "port": 18790,
-    "tls": true,
-    "_tls_control": "SC-8: Transmission confidentiality via TLS"
+    "bind": "loopback",
+    "_bind_control": "AC-17: Remote access restricted to loopback by default. Use lan only with gateway auth + Cloudflare Tunnel for external.",
+    "port": 18789,
+    "tls": {
+      "enabled": true,
+      "_enabled_control": "SC-8: Transmission confidentiality via TLS termination at the gateway"
+    },
+    "auth": {
+      "mode": "token",
+      "_mode_control": "IA-2, AC-3: Gateway auth required; token mode enforces shared-secret authentication",
+      "token": {
+        "source": "file",
+        "provider": "filemain",
+        "_note": "Token MUST be stored via SecretRef, never inline plaintext"
+      },
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000,
+        "exemptLoopback": true,
+        "_control": "AC-7, SC-5: Unsuccessful login attempts limited; lockout prevents brute-force"
+      }
+    },
+    "controlUi": {
+      "enabled": true,
+      "allowedOrigins": [],
+      "_allowedOrigins_control": "AC-17, SC-7: Explicit browser-origin allowlist for non-loopback Control UI access. Empty = loopback only.",
+      "allowInsecureAuth": false,
+      "_allowInsecureAuth_control": "SC-8: Reject plaintext auth on non-TLS connections",
+      "dangerouslyAllowHostHeaderOriginFallback": false,
+      "_dangerouslyAllowHostHeaderOriginFallback_control": "SC-7: Host-header origin fallback disabled to prevent header spoofing"
+    },
+    "terminal": {
+      "enabled": false,
+      "_enabled_control": "AC-3, AC-6: Operator terminal disabled by default; host PTY is a privileged surface"
+    },
+    "reload": {
+      "mode": "hybrid",
+      "_mode_control": "CM-3: Configuration change management via controlled hot-reload"
+    },
+    "nodes": {
+      "pairing": {
+        "autoApproveCidrs": [],
+        "_control": "AC-2, IA-2: Device pairing auto-approval disabled (empty CIDR list). Populate only for trusted network segments. Does not auto-approve operator/browser/Control UI pairing."
+      },
+      "allowCommands": [],
+      "denyCommands": [],
+      "_commands_control": "AC-3, CM-7: Node command allow/deny shaping. Default empty = platform defaults only. Dangerous commands (camera.snap, sms.send, screen.record) require explicit allowCommands entry."
+    },
+    "tools": {
+      "deny": [],
+      "allow": [],
+      "_control": "AC-3, AC-6: HTTP /tools/invoke deny/allow shaping. deny extends the default block list; allow removes from it for owner/admin callers only."
+    },
+    "tailscale": {
+      "mode": "off",
+      "_mode_control": "SC-7, AC-17: Tailscale integration off by default. 'serve' exposes to tailnet only; 'funnel' exposes publicly (requires auth)."
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": false,
+          "_control": "AC-3, CM-7: OpenAI-compatible chat completions API disabled by default. Enable only for trusted API consumers."
+        },
+        "responses": {
+          "enabled": false,
+          "_control": "AC-3, CM-7: Responses API disabled by default."
+        }
+      }
+    }
   },
 
   "agents": {
@@ -18,60 +85,101 @@
       "sandbox": {
         "mode": "all",
         "_sandbox_control": "AC-3, AC-6: Least privilege enforced via full sandbox mode"
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "_mode_control": "AU-9: Protection of audit information --safeguard mode preserves security-relevant events during compaction",
+        "midTurnPrecheck": {
+          "enabled": true,
+          "_control": "AC-3: Pre-execution safety gate prevents mid-turn context loss"
+        },
+        "memoryFlush": {
+          "enabled": true,
+          "_control": "AU-9, SI-12: Flush memory to durable store before compaction discards working context"
+        },
+        "truncateAfterCompaction": true,
+        "_truncateAfterCompaction_control": "SI-12: Bound memory growth after compaction to prevent resource exhaustion",
+        "notifyUser": true,
+        "_notifyUser_control": "AU-3: Operator is notified when compaction occurs --audit trail visibility"
+      },
+      "maxConcurrent": 4,
+      "_maxConcurrent_control": "SC-5: Bound concurrent agent sessions to prevent resource exhaustion",
+      "subagents": {
+        "maxConcurrent": 8,
+        "archiveAfterMinutes": 60,
+        "inheritSandbox": true,
+        "allowChildOverrides": false,
+        "_control": "AC-6, AC-3: Least privilege --child sessions cannot escalate beyond parent's toolset; concurrent subagents bounded"
+      },
+      "cliBackends": {
+        "_note": "CLI backend definitions for agent runtimes. Each backend must declare an explicit command path (absolute), output format, and serialization mode. Never use wildcard or unvalidated command paths.",
+        "_control": "CM-7, AC-3: Least functionality + access enforcement for runtime process invocation"
+      },
+      "memorySearch": {
+        "_note": "Memory search provider config. Defines which backend services agent memory queries. Audit which providers have access to memory content.",
+        "_control": "SC-28, AC-3: Memory search queries may contain sensitive context; provider must be trusted"
       }
     },
     "allowlist": [],
-    "_allowlist_control": "AC-2: Only named, authorized users in allowlist",
-    "subagents": {
-      "_note": "Subagent definitions inherit sandbox mode from agents.defaults.sandbox. Never grant a subagent a wider tool scope than its parent.",
-      "_control": "AC-6, AC-3: Least privilege — child sessions cannot escalate beyond parent's toolset",
-      "inheritSandbox": true,
-      "allowChildOverrides": false
-    }
+    "_allowlist_control": "AC-2: Only named, authorized users in allowlist"
   },
 
   "auth": {
     "_control": "IA-2, IA-5: Authenticator selection and management",
     "profiles": {
-      "_note": "Every provider profile must declare mode explicitly (token | oauth | api_key). Do NOT pin secrets inline — use ref/provider (env/secret manager) so at-rest is centrally rotatable.",
+      "_note": "Every provider profile must declare mode explicitly (token | oauth | api_key). Do NOT pin secrets inline --use ref/provider (env/secret manager) so at-rest is centrally rotatable.",
       "_control": "IA-5: Authenticator management; SC-28: Protection at rest via external secret store"
     },
     "order": {
       "_note": "Explicit ordering per provider so failover paths are auditable. Never rely on iteration order of the profiles object.",
       "_control": "CM-6: Config settings must be deterministic"
+    },
+    "cooldowns": {
+      "_note": "Auth failure cooldown prevents rapid retry against billing/rate-limit/auth-permanent errors. Review defaults; overly aggressive cooldowns can mask incidents.",
+      "_control": "AC-7, SI-4: Failed authentication tracking and incident detection"
     }
   },
 
   "hooks": {
-    "_note": "Hooks are the OpenClaw automation surface — inbound webhooks and PreToolUse/PostToolUse handlers. Never expose an inbound webhook without an explicit token/session/agent binding. External surfaces must be explicitly enabled; internal-only is the default.",
+    "_note": "Hooks are the OpenClaw automation surface --inbound webhooks and PreToolUse/PostToolUse handlers. Never expose an inbound webhook without an explicit token/session/agent binding.",
     "_control": "AC-3: Access enforcement on inbound triggers; AC-6: Least privilege for hook-invoked actions",
+    "enabled": false,
+    "_enabled_control": "AC-3: External inbound hook surface disabled by default",
     "internal": {
       "enabled": true,
       "entries": {
         "_note": "Populate with the internal hooks this deployment uses (boot-md, command-logger, session-memory are the OpenClaw defaults)."
       }
     },
-    "external": {
-      "enabled": false,
-      "_control": "AC-17: Remote access restrictions — external hook surface disabled by default; require explicit token binding to enable"
-    }
+    "allowRequestSessionKey": false,
+    "_allowRequestSessionKey_control": "AC-3: External callers cannot inject arbitrary session keys; prevents session hijack via hook payload",
+    "allowedAgentIds": [],
+    "_allowedAgentIds_control": "AC-6: Restrict which agents can be targeted via hook invocation; empty = deny all external agent routing"
   },
 
   "mcp": {
     "servers": {
-      "_note": "Every MCP server entry needs an explicit URL and transport. Bearer tokens MUST be referenced from a secrets manager (ref/provider), not inline. Connections MUST set connectionTimeoutMs.",
+      "_note": "Every MCP server entry needs an explicit URL and transport. Bearer tokens MUST be referenced from a secrets manager (ref/provider), not inline. Connections MUST set connectionTimeoutMs. Use toolFilter.exclude to block admin/destructive tools.",
       "_control": "AC-3, SC-8, SC-28: Access enforcement + transmission confidentiality + at-rest protection for MCP credentials",
       "_forbidden_patterns": ["wildcard hosts", "unauthenticated servers", "plaintext bearer in file"]
-    }
+    },
+    "sessionIdleTtlMs": 600000,
+    "_sessionIdleTtlMs_control": "AC-12: Session termination --idle MCP sessions reaped after TTL to prevent stale credential reuse"
   },
 
   "browser": {
     "enabled": false,
-    "_enabled_control": "CM-7: Least functionality — browser tool disabled unless the deployment needs it",
+    "_enabled_control": "CM-7: Least functionality --browser tool disabled unless the deployment needs it",
     "noSandbox": false,
-    "_noSandbox_control": "AC-6: Least privilege — Chrome sandbox stays on unless the profile explicitly needs attachOnly",
+    "_noSandbox_control": "AC-6: Least privilege --Chrome sandbox stays on",
     "attachOnly": true,
-    "_attachOnly_control": "AC-3: Access enforcement — attach to an operator-supervised CDP endpoint rather than spawning a browser with agent-scope permissions",
+    "_attachOnly_control": "AC-3: Access enforcement --attach to an operator-supervised CDP endpoint rather than spawning a browser with agent-scope permissions",
+    "evaluateEnabled": false,
+    "_evaluateEnabled_control": "AC-3: Disable act:evaluate and wait --fn to prevent arbitrary JS execution in browser context",
+    "ssrfPolicy": {
+      "dangerouslyAllowPrivateNetwork": false,
+      "_control": "SC-7: Boundary protection --block browser navigation to private/internal networks by default"
+    },
     "tabCleanup": {
       "enabled": true,
       "_control": "AC-3, SC-28: Prevent stale tabs from retaining sensitive session context"
@@ -80,65 +188,141 @@
 
   "approvals": {
     "_control": "AC-3, AC-6: Access enforcement + least privilege for exec/plugin approval routing",
-    "_note": "Approval routing forwards exec + plugin approval requests to chat destinations outside the originating session. Keep disabled unless operators need explicit out-of-band approval visibility — enabling widens the trust boundary.",
-    "enabled": false
-  },
-
-  "session": {
-    "compaction": {
-      "_control": "AU-9: Protection of audit information — compaction must preserve, not discard, security-relevant events",
-      "_note": "Compaction thresholds and preservation rules should be reviewed on the same cadence as CM-2 baseline reviews. See reference_openclaw_compaction_config.md."
+    "_note": "Approval routing forwards exec + plugin approval requests to chat destinations outside the originating session. Keep disabled unless operators need explicit out-of-band approval visibility. Enabling widens the trust boundary.",
+    "exec": {
+      "enabled": false,
+      "_enabled_control": "AC-3: Exec approval forwarding disabled by default. Enable only when human approval responders need channel-visible prompts."
     }
   },
 
+  "session": {
+    "dmScope": "per-channel-peer",
+    "_dmScope_control": "AC-4: Information flow enforcement --DM sessions scoped per channel-peer prevent cross-channel context leakage",
+    "typingMode": "instant",
+    "_typingMode_control": "SC-7: Typing indicator mode --instant reduces information leakage about processing duration",
+    "compaction": {
+      "_control": "AU-9: Protection of audit information --compaction must preserve, not discard, security-relevant events",
+      "_note": "Compaction thresholds and preservation rules should be reviewed on the same cadence as CM-2 baseline reviews."
+    }
+  },
+
+  "messages": {
+    "groupChat": {
+      "visibleReplies": "automatic",
+      "_visibleReplies_control": "AC-4: Information flow enforcement --control which group members see agent replies"
+    },
+    "ackReactionScope": "group-all",
+    "_ackReactionScope_control": "AU-3: Audit trail --acknowledgment reactions visible to all group members for transparency",
+    "statusReactions": {
+      "enabled": true,
+      "_enabled_control": "AU-3: Status reactions provide visible processing-state audit trail"
+    }
+  },
+
+  "commands": {
+    "native": "auto",
+    "_native_control": "CM-7: Least functionality --native commands auto-detected per platform",
+    "nativeSkills": "auto",
+    "_nativeSkills_control": "CM-5, CM-7: Skill-sourced commands controlled by skill enablement policy",
+    "restart": true,
+    "_restart_control": "CM-3: Configuration change management --operator restart command available for controlled recovery",
+    "ownerAllowFrom": [],
+    "_ownerAllowFrom_control": "AC-2, IA-2: Owner-privileged commands restricted to explicit user IDs --empty list means no remote owner commands"
+  },
+
   "models": {
+    "mode": "merge",
+    "_mode_control": "CM-6: Provider catalog merge mode must be explicit",
     "rateLimit": {
-      "_control": "SC-5: Denial-of-service protection — rate limits bound outbound spend and prevent runaway automation loops",
+      "_control": "SC-5: Denial-of-service protection --rate limits bound outbound spend and prevent runaway automation loops",
       "_note": "Set per-model rate limits, especially for hosted providers. Missing rate limits create an availability risk (spend runaway) and a data-leak risk (uncapped calls to external APIs)."
+    },
+    "pricing": {
+      "enabled": true,
+      "_control": "AU-2, AU-12: Cost tracking --pricing bootstrap provides audit trail for model spend"
     }
   },
 
   "skills": {
     "_control": "CM-5, CM-7: Access restrictions for change + least functionality",
     "workshop": {
-      "enabled": true,
-      "_enabled_control": "CM-5: Skill-workshop review gate blocks new-skill installs pending operator review",
-      "requireReview": true,
-      "_requireReview_control": "CM-5: All new skills route through the workshop review queue — no auto-install from ClawHub"
+      "approvalPolicy": "review",
+      "_approvalPolicy_control": "CM-5: Skill-workshop review gate blocks new-skill installs pending operator review. Never set to 'auto' in production.",
+      "allowSymlinkTargetWrites": false,
+      "_allowSymlinkTargetWrites_control": "AC-3: Prevent skill writes through symlinks to escape workspace boundary"
+    },
+    "install": {
+      "allowUploadedArchives": false,
+      "_allowUploadedArchives_control": "CM-5: Block installation of uploaded skill archives unless explicitly trusted"
+    },
+    "load": {
+      "allowSymlinkTargets": [],
+      "_control": "AC-3: Symlink target trust roots for skill loading. Empty = no symlink traversal allowed. Populate only for trusted development paths."
+    },
+    "limits": {
+      "_control": "SC-5, CM-7: Bound skill discovery and prompt injection surface",
+      "_note": "Review maxSkillsInPrompt and maxSkillsPromptChars to limit the model-facing skills prompt size."
+    },
+    "entries": {
+      "_note": "Explicitly disable every skill not required by the deployment. Default: all disabled. Enable only after vetting the skill's tool surface, network access, and credential requirements.",
+      "_control": "CM-7: Least functionality -- unused skills disabled"
     }
   },
 
-  "sandboxes": {
-    "_control": "AC-3, AC-6: Access enforcement + least privilege",
-    "_note": "Named sandbox profiles. Every entry declares its allowed tool scope; agents referencing a sandbox inherit its constraints. Never define a 'permissive' or 'all-tools' sandbox for production agents.",
-    "defaultProfile": "restricted",
-    "profiles": {
-      "restricted": {
-        "workspaceOnly": true,
-        "execElevated": false,
-        "browser": false,
-        "network": false
-      }
-    }
-  },
+  "_sandboxes_note": "OpenClaw does not expose a top-level 'sandboxes' config key. Sandbox behavior is controlled per-agent via agents.defaults.sandbox.mode (see above). Named sandbox profiles are a Sarge documentation concept, not a schema-level config surface.",
 
   "plugins": {
-    "_note": "Enable only required plugins — disable all others",
-    "_control": "CM-7: Least functionality — disable unused capabilities",
+    "_note": "Enable only required plugins --disable all others. Use allow/deny lists to constrain plugin loading.",
+    "_control": "CM-7: Least functionality --disable unused capabilities",
+    "entries": {
+      "_note": "Each plugin entry should set enabled: true|false explicitly. For plugins with hooks, set hooks.allowPromptInjection: false to prevent prompt mutation. For plugins with subagent access, restrict allowedModels.",
+      "_control": "CM-7, AC-3: Least functionality + access enforcement per plugin",
+      "_hardening_checklist": [
+        "hooks.allowPromptInjection: false",
+        "hooks.allowConversationAccess: false (unless explicitly needed)",
+        "subagent.allowModelOverride: false (unless explicitly needed)",
+        "llm.allowModelOverride: false (unless explicitly needed)"
+      ]
+    },
     "workboard": {
       "_control": "AU-2, AU-12: Auditable events + agent action logging via the workboard dispatch trail",
       "_note": "Workboard is the durable card store for agent dispatch. Persistence is required if any agent runs long-lived cards; retention should match your audit-retention policy."
+    },
+    "slots": {
+      "memory": "_note: pick the active memory plugin id, or 'none' to disable. Review which plugin has memory access.",
+      "contextEngine": "_note: pick the active context engine plugin id. Defaults to 'legacy'. Custom engines control what context the model sees.",
+      "_control": "AC-3, CM-7: Plugin slot selection determines which plugins have privileged access to memory and context"
     }
   },
 
   "tools": {
     "fs": {
       "workspaceOnly": true,
-      "_workspaceOnly_control": "AC-3: Access enforcement — filesystem limited to workspace"
+      "_workspaceOnly_control": "AC-3: Access enforcement --filesystem limited to workspace"
     },
     "exec": {
       "elevated": false,
       "_elevated_control": "AC-6: No elevated exec unless explicitly required and approved"
+    },
+    "web": {
+      "search": {
+        "enabled": true,
+        "_control": "AC-4: Web search enabled; outbound queries are information flow -- review what data leaves the workspace"
+      },
+      "fetch": {
+        "enabled": true,
+        "_control": "AC-4, SC-7: Web fetch enabled; fetched content enters the agent context -- validate URLs against SSRF policy"
+      }
+    },
+    "codeMode": {
+      "enabled": false,
+      "_control": "AC-3, AC-6: Code mode surfaces exec+wait only; disable unless the deployment needs generic code execution."
+    },
+    "sandbox": {
+      "tools": {
+        "alsoAllow": [],
+        "_control": "AC-3, CM-7: Sandbox tool allowlist extension. Empty = only default sandbox tools. Add MCP/plugin tool names explicitly when needed in sandboxed sessions."
+      }
     }
   },
 
@@ -150,16 +334,276 @@
     "includeUser": true,
     "_user_control": "AU-3: Audit records must include user identity",
     "auditActions": true,
-    "_auditActions_control": "AU-12: All agent actions logged"
+    "_auditActions_control": "AU-12: All agent actions logged",
+    "redactSensitive": "tools",
+    "_redactSensitive_control": "SC-28, AU-9: Redact sensitive data from logs --'tools' mode masks tool output secrets"
+  },
+
+  "audit": {
+    "enabled": true,
+    "_enabled_control": "AU-2, AU-12: Metadata-only audit ledger enabled by default --records identity, timing, tool names, and outcomes. Disabling creates a gap that cannot be backfilled."
   },
 
   "channels": {
-    "_note": "Restrict each channel to named allowedUsers only",
-    "_allowedUsers_control": "AC-2, IA-2: Authentication and account management"
+    "_note": "Restrict each channel to named allowedUsers only. Every guild/channel entry must declare a users array. groupPolicy should be restrictive.",
+    "_allowedUsers_control": "AC-2, IA-2: Authentication and account management",
+    "_hardening_checklist": [
+      "Per-channel users array: populated, not empty",
+      "requireMention: true for shared/public channels",
+      "streaming.mode: off unless operators need live streaming",
+      "groupPolicy: restrictive (not 'open') for production"
+    ]
+  },
+
+  "cron": {
+    "maxConcurrentRuns": 8,
+    "_maxConcurrentRuns_control": "SC-5: Bound concurrent cron executions to prevent resource exhaustion",
+    "retry": {
+      "maxAttempts": 3,
+      "_control": "SI-17: Fail-safe --bounded retry prevents infinite loops on transient errors"
+    },
+    "failureAlert": {
+      "enabled": true,
+      "_enabled_control": "SI-4: Information system monitoring -- alert on repeated cron failures to detect degraded automation"
+    },
+    "sessionRetention": "24h",
+    "_sessionRetention_control": "SI-12, AU-9: Retain completed cron session data for audit review. Set false to disable; align with your audit retention policy.",
+    "_note": "Review cron job session retention and webhook token rotation on the same cadence as CM-2 baseline reviews."
+  },
+
+  "secrets": {
+    "_control": "SC-28, IA-5: Protection of information at rest + authenticator management",
+    "providers": {
+      "_note": "Define at least one secret provider (file or exec). File providers must point to permission-restricted paths (600/700). Exec providers must use absolute command paths.",
+      "_control": "SC-28: At-rest credential storage via managed provider, never inline plaintext"
+    },
+    "defaults": {
+      "_note": "Map each source type (env, file, exec) to its default provider. Ensures SecretRef resolution is deterministic.",
+      "_control": "CM-6: Configuration settings must be deterministic"
+    }
+  },
+
+  "diagnostics": {
+    "enabled": true,
+    "_enabled_control": "SI-4: Information system monitoring --diagnostics provide operational health visibility",
+    "otel": {
+      "enabled": false,
+      "_enabled_control": "AU-6: Audit review --enable OTEL export only to trusted collectors. captureContent must stay disabled unless the collector is within your data boundary.",
+      "captureContent": {
+        "enabled": false,
+        "_control": "SC-28, AC-4: Content capture disabled -- raw prompts/messages/tool I/O must not leave the system boundary without explicit operator consent"
+      }
+    },
+    "cacheTrace": {
+      "enabled": false,
+      "_control": "SC-28, AU-9: Cache trace logs may contain prompts and system context. Disable unless actively debugging cache behavior."
+    }
   },
 
   "memory": {
     "encryption": true,
     "_control": "SC-28: Protection of information at rest"
+  },
+
+  "discovery": {
+    "mdns": {
+      "mode": "minimal",
+      "_mode_control": "SC-7: Boundary protection --minimal mDNS suppresses cliPath and sshPort from LAN broadcast"
+    }
+  },
+
+  "update": {
+    "auto": {
+      "enabled": false,
+      "_enabled_control": "CM-3, SI-2: Change management -- auto-update disabled so patches are reviewed before application. Enable only with stableDelayHours >= 6."
+    }
+  },
+
+  "acp": {
+    "_control": "AC-3, SC-5: Access enforcement + DoS protection for Agent Communication Protocol sessions",
+    "enabled": true,
+    "_enabled_note": "ACP is on by default. Disable only if no ACP dispatch is needed. When enabled, bind with allowedAgents and maxConcurrentSessions.",
+    "dispatch": {
+      "enabled": true
+    },
+    "allowedAgents": [],
+    "_allowedAgents_control": "AC-6: Restrict which agents ACP sessions can target. Empty = no restriction (populate for production).",
+    "maxConcurrentSessions": 10,
+    "_maxConcurrentSessions_control": "SC-5: Bound concurrent ACP sessions to prevent resource exhaustion",
+    "stream": {
+      "maxOutputChars": 50000,
+      "_maxOutputChars_control": "AC-4: Bound streamed output to prevent unbounded data exfiltration via ACP"
+    },
+    "runtime": {
+      "ttlMinutes": 30,
+      "_ttlMinutes_control": "AC-12: Session termination -- idle ACP workers reaped after TTL"
+    }
+  },
+
+  "commitments": {
+    "_control": "AC-3, SI-4: Inferred follow-up commitment delivery requires operator awareness",
+    "enabled": false,
+    "_enabled_control": "AC-3: Disabled by default. When enabled, LLM extracts follow-up commitments from conversations and delivers them autonomously. Review maxPerDay before enabling.",
+    "maxPerDay": 3
+  },
+
+  "env": {
+    "_control": "SC-28, IA-5: Inline env vars must not contain secrets in plaintext. Use SecretRef or external .env files for credentials.",
+    "_note": "Audit env block for plaintext API keys. shellEnv.enabled=true imports from login shell, which may contain sensitive exports.",
+    "shellEnv": {
+      "enabled": true,
+      "_control": "IA-5: Login shell env import. Review shell profile for leaked credentials."
+    }
+  },
+
+  "security": {
+    "_control": "CA-7, SI-4: Continuous monitoring + information system monitoring",
+    "audit": {
+      "suppressions": {
+        "_note": "Audit suppression rules silence specific audit events. Every suppression must be justified and reviewed periodically. Unreviewed suppressions create blind spots.",
+        "_control": "AU-6: Audit review -- suppressions reduce audit coverage; document the justification for each entry"
+      }
+    },
+    "installPolicy": {
+      "enabled": true,
+      "_enabled_control": "CM-5, CM-7: Install policy gates skill and plugin installation. Disabling removes a change-control barrier.",
+      "targets": {
+        "_note": "Install policy target rules. Restrict which packages/skills/plugins can be installed. Default: platform-managed allowlist.",
+        "_control": "CM-5: Access restrictions for change"
+      },
+      "exec": {
+        "_note": "Execution policy for installed artifacts. Review shell and binary execution permissions granted by installed packages.",
+        "_control": "CM-7, AC-3: Least functionality + access enforcement for installed executables"
+      }
+    }
+  },
+
+  "proxy": {
+    "_control": "SC-7, AC-4: Boundary protection + information flow enforcement",
+    "enabled": false,
+    "_enabled_control": "SC-7: Managed forward proxy disabled by default. Enable only when central egress control is required by the deployment boundary.",
+    "proxyUrl": "",
+    "_proxyUrl_note": "When enabled, all runtime HTTP/HTTPS/WebSocket egress routes through this URL. Startup fails if enabled=true and proxyUrl is empty.",
+    "tls": {
+      "caFile": "",
+      "_control": "SC-8: Custom CA for proxy TLS. Leave empty to use system trust store."
+    },
+    "loopbackMode": "gateway-only",
+    "_loopbackMode_control": "SC-7: Loopback routing mode while proxy is active. 'gateway-only' exempts loopback control-plane traffic from proxy routing."
+  },
+
+  "accessGroups": {
+    "_control": "AC-2, AC-3: Account management + access enforcement",
+    "_note": "Named access groups for role-based access control. Map groups to agent capabilities, channel access, and command privileges. Keep group membership minimal and audited."
+  },
+
+  "nodeHost": {
+    "_control": "SC-7, AC-3: Boundary protection + access enforcement for node-hosted services",
+    "browserProxy": {
+      "enabled": false,
+      "_enabled_control": "SC-7, AC-3: Browser proxy disabled by default. Enable only when remote nodes need to use this gateway's browser capabilities. Exposing browser control across the node network widens the attack surface.",
+      "allowProfiles": [],
+      "_allowProfiles_control": "AC-6: Restrict which browser profiles can be proxied to remote nodes. Empty = no profiles exposed."
+    }
+  },
+
+  "transcripts": {
+    "_control": "AU-12, SC-28: Audit generation + protection of information at rest",
+    "enabled": false,
+    "_enabled_control": "AU-12: Transcript capture disabled by default. Enable only when operators explicitly want agents to record or import meeting content. Captured transcripts may contain sensitive PII/PHI.",
+    "maxUtterances": 500,
+    "_maxUtterances_control": "SI-12: Bound transcript retention to prevent unbounded storage of conversational data",
+    "autoStart": {
+      "_note": "Live transcript sources started automatically on gateway boot. Each entry widens the passive recording surface. Disable all entries unless active recording is operationally required.",
+      "_control": "AU-12, AC-3: Automatic recording must be explicitly authorized per source"
+    }
+  },
+
+  "broadcast": {
+    "_control": "AC-4, AU-12: Information flow enforcement + audit for fan-out messaging",
+    "_note": "Broadcast routing fans one outbound message to multiple destinations. Keep mappings minimal and audited. One misconfigured source can leak context to unintended peers.",
+    "strategy": "sequential",
+    "_strategy_control": "SC-5: Sequential delivery prevents burst fan-out from overwhelming downstream peers"
+  },
+
+  "bindings": {
+    "_control": "AC-3, AC-6: Access enforcement + least privilege for ACP routing and persistent conversation ownership",
+    "_note": "Top-level binding rules. type=route for normal routing, type=acp for persistent ACP harness bindings. Misconfigured bindings can grant unintended agent access to conversations. Audit binding rules on the same cadence as CM-2 baseline reviews."
+  },
+
+  "crestodian": {
+    "_control": "CP-10, SI-17: System recovery + fail-safe procedures",
+    "rescue": {
+      "enabled": false,
+      "_enabled_control": "CP-10: Rescue mode disabled by default. When enabled, a stuck or unresponsive agent session can be recovered by the owner. Review ownerDmOnly and pendingTtlMinutes before enabling.",
+      "ownerDmOnly": true,
+      "_ownerDmOnly_control": "AC-3: Restrict rescue triggers to owner DM channel only. Prevents non-owner users from invoking rescue in shared channels.",
+      "pendingTtlMinutes": 5,
+      "_pendingTtlMinutes_control": "AC-12: Pending rescue requests expire after TTL to prevent stale rescue state"
+    }
+  },
+
+  "talk": {
+    "_control": "AC-4, SC-7: Information flow + boundary protection for voice synthesis and realtime consult routing",
+    "_note": "Talk mode exposes voice synthesis and realtime model consult paths. Review provider trust, consult routing, and interrupt behavior. Realtime consult routing can invoke the full agent stack.",
+    "realtime": {
+      "consultRouting": {
+        "_note": "Gateway relay fallback for finalized realtime Talk transcripts. Review which agent/model handles consult routing to prevent unintended model access.",
+        "_control": "AC-3: Consult routing must target an authorized agent and model"
+      }
+    },
+    "interruptOnSpeech": true,
+    "_interruptOnSpeech_control": "SC-7: Interrupt on speech enabled to prevent agents from speaking over users in voice mode"
+  },
+
+  "media": {
+    "_control": "SC-28, SI-12: Protection at rest + information retention",
+    "preserveFilenames": false,
+    "_preserveFilenames_control": "SC-28: Renamed media files reduce information leakage from original filenames",
+    "ttlHours": 24,
+    "_ttlHours_control": "SI-12: Inbound media retention bounded to 24h by default. Longer retention increases data-at-rest exposure."
+  },
+
+  "marketplaces": {
+    "_control": "CM-5, CM-7: Access restrictions for change + least functionality",
+    "feeds": {
+      "_note": "Marketplace feed profiles. Feeds provide package selection and governance metadata. Only trust feeds from verified publishers. Review feed URLs and their governance policies.",
+      "_control": "CM-5: Feed trust roots gate which packages are discoverable for installation"
+    },
+    "sources": {
+      "_note": "Local package source names for install candidates. Restrict to known-good sources only.",
+      "_control": "CM-7: Least functionality -- limit installable package sources"
+    }
+  },
+
+  "web": {
+    "_control": "SC-7, AC-17: Boundary protection + remote access for web channel surfaces",
+    "enabled": false,
+    "_enabled_control": "SC-7: Web channel disabled by default. Enable only when web-based chat surfaces are required.",
+    "heartbeatSeconds": 30,
+    "_heartbeatSeconds_control": "SI-4: Heartbeat interval for web channel health monitoring",
+    "reconnect": {
+      "_note": "Reconnect settings for web channel resilience. Review max retries and backoff to balance availability against resource exhaustion.",
+      "_control": "SC-5: Reconnect behavior must be bounded to prevent infinite retry loops"
+    }
+  },
+
+  "audio": {
+    "_control": "CM-7, AC-3: Least functionality + access enforcement for audio transcription exec surface",
+    "transcription": {
+      "command": [],
+      "_command_control": "CM-7, AC-3: Audio transcription command array. First token must be an absolute path to a trusted binary. Empty = transcription disabled. Never use shell metacharacters or relative paths.",
+      "timeoutSeconds": 30,
+      "_timeoutSeconds_control": "SC-5: Bound transcription runtime to prevent resource exhaustion from malformed or oversized audio input"
+    }
+  },
+
+  "surfaces": {
+    "_control": "AC-4: Information flow enforcement per interaction surface",
+    "_note": "Per-surface reply visibility rules. Each named surface can override silentReply behavior for group and internal contexts. Misconfigured surfaces can leak agent replies to unintended audiences. Audit surface entries on the same cadence as CM-2 baseline reviews.",
+    "_hardening_checklist": [
+      "silentReply.group: disallow unless the surface explicitly needs silent group replies",
+      "silentReply.internal: disallow unless the surface explicitly needs silent internal replies"
+    ]
   }
 }

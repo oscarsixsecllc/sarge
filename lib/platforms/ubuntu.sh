@@ -408,6 +408,9 @@ _ubuntu_drift_fields() {
   local apt_trusted_keys
   apt_trusted_keys=$(ubuntu_apt_trusted_keys_count) || true
   echo "apt_trusted_keys_count=${apt_trusted_keys:-unknown}"
+
+  # OpenClaw config surface (shared across platforms, defined in _dispatch.sh)
+  _sarge_openclaw_config_drift_fields
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in

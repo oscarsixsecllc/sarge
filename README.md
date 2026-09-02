@@ -2,7 +2,7 @@
 
 > **Focus Forward. We've Got Your Six.** — Oscar Six Security LLC
 
-[![Version](https://img.shields.io/badge/version-v0.1.1-green)](https://github.com/oscarsixsecllc/sarge/releases)
+[![Version](https://img.shields.io/badge/version-v0.7.0-green)](https://github.com/oscarsixsecllc/sarge/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20macOS%20%7C%20Windows-orange)](docs/quickstart.md)
 
