@@ -327,6 +327,48 @@ ubuntu_aslr_setting() { cat /proc/sys/kernel/randomize_va_space 2>/dev/null; }
 #      fallback when the *left* side fails — without `pipefail` the
 #      pipeline exit is from head (zero on empty stdin). Capture-then-
 #      default sidesteps that entirely.
+# SHA-256 of a single file's contents. Prints "missing" if the file
+# doesn't exist, isn't readable, or `sha256sum` isn't available — never
+# fails under `set -euo pipefail`.
+_ubuntu_sha256_of_file() {
+  local path="$1" hash
+  if [[ ! -r "$path" ]] || ! command -v sha256sum &>/dev/null; then
+    echo "missing"
+    return 0
+  fi
+  hash=$(sha256sum "$path" 2>/dev/null | awk '{print $1}') || true
+  echo "${hash:-missing}"
+}
+
+# SHA-256 of the concatenated, sorted contents of a glob of files (e.g.
+# a rules.d/*.rules directory). Sorting the file list first makes the
+# hash stable regardless of filesystem enumeration order. Prints
+# "missing" if no files match or sha256sum is unavailable.
+_ubuntu_sha256_of_glob() {
+  local -a files=("$@")
+  local existing=() f hash
+  command -v sha256sum &>/dev/null || { echo "missing"; return 0; }
+  for f in "${files[@]}"; do
+    [[ -r "$f" ]] && existing+=("$f")
+  done
+  if [[ ${#existing[@]} -eq 0 ]]; then
+    echo "missing"
+    return 0
+  fi
+  hash=$(cat "$(printf '%s\n' "${existing[@]}" | sort)" 2>/dev/null | sha256sum | awk '{print $1}') || true
+  echo "${hash:-missing}"
+}
+
+# SHA-256 of a command's (sorted) stdout. Used for package/service
+# inventory hashing. Prints "missing" if the command fails or
+# sha256sum is unavailable — never fails under `set -euo pipefail`.
+_ubuntu_sha256_of_command() {
+  local hash
+  command -v sha256sum &>/dev/null || { echo "missing"; return 0; }
+  hash=$("$@" 2>/dev/null | sort | sha256sum | awk '{print $1}') || true
+  echo "${hash:-missing}"
+}
+
 _ubuntu_drift_fields() {
   local ufw auditd f2b perm pmd log_free ntp_sync disk_full_action rotate_count
   local dup_uid_count ssh_protocol_1 ia_oc_config auth_mode session_idle_ttl
@@ -409,8 +451,43 @@ _ubuntu_drift_fields() {
   apt_trusted_keys=$(ubuntu_apt_trusted_keys_count) || true
   echo "apt_trusted_keys_count=${apt_trusted_keys:-unknown}"
 
+  # SI-7 / CM-2: file-integrity hashes for security-critical files.
+  # `sha256sum` prints "missing" for the value when the file doesn't
+  # exist or hashing fails, so callers under `set -euo pipefail` never
+  # abort on an absent file (some hosts don't run auditd, ufw, etc.).
+  local oc_json_hash sshd_hash pam_hash audit_hash ufw_hash
+  local oc_json_path
+  for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+    if [[ -f "$candidate" ]]; then
+      oc_json_path="$candidate"
+      break
+    fi
+  done
+  oc_json_hash=$(_ubuntu_sha256_of_file "${oc_json_path:-$HOME/.openclaw/openclaw.json}")
+  sshd_hash=$(_ubuntu_sha256_of_file "/etc/ssh/sshd_config")
+  pam_hash=$(_ubuntu_sha256_of_file "/etc/pam.d/common-auth")
+  audit_hash=$(_ubuntu_sha256_of_glob "/etc/audit/rules.d/"*.rules)
+  ufw_hash=$(_ubuntu_sha256_of_file "/etc/ufw/user.rules")
+  echo "openclaw_json_sha256=${oc_json_hash}"
+  echo "sshd_config_sha256=${sshd_hash}"
+  echo "pam_common_auth_sha256=${pam_hash}"
+  echo "audit_rules_sha256=${audit_hash}"
+  echo "ufw_rules_sha256=${ufw_hash}"
+
+  # CM-8: package + service inventory hashes. Detects package
+  # additions/removals and enabled-service changes between snapshots
+  # without storing the full (large) inventory in the snapshot itself.
+  local pkg_hash svc_hash
+  pkg_hash=$(_ubuntu_sha256_of_command dpkg --get-selections)
+  svc_hash=$(_ubuntu_sha256_of_command systemctl list-unit-files --state=enabled --no-legend)
+  echo "installed_packages_sha256=${pkg_hash}"
+  echo "enabled_services_sha256=${svc_hash}"
+
   # OpenClaw config surface (shared across platforms, defined in _dispatch.sh)
   _sarge_openclaw_config_drift_fields
+
+  # CM-2: control-catalog sync check (shared across platforms, _dispatch.sh)
+  _sarge_catalog_sync_field
 }
 
 # Snapshot + compare dispatch entry points. The actual loops live in
