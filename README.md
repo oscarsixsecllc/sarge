@@ -2,7 +2,7 @@
 
 > **Focus Forward. We've Got Your Six.** — Oscar Six Security LLC
 
-[![Version](https://img.shields.io/badge/version-v0.7.0-green)](https://github.com/oscarsixsecllc/sarge/releases)
+[![Version](https://img.shields.io/badge/version-v0.9.0-green)](https://github.com/oscarsixsecllc/sarge/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20macOS%20%7C%20Windows-orange)](docs/quickstart.md)
 
@@ -14,7 +14,7 @@ Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool,
 
 ## What Sarge Does
 
-- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **63 controls across 12 NIST families + AS agent-safety overlay** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x. See [NIST 800-53 Rev 5 Control Coverage](#nist-800-53-rev-5-control-coverage) below for the full per-control breakdown.
+- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **63 controls across 12 NIST families + AS agent-safety overlay** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x–2026.8.x (tested against 2026.8.2). See [NIST 800-53 Rev 5 Control Coverage](#nist-800-53-rev-5-control-coverage) below for the full per-control breakdown.
 - 🔒 **Hardening Scripts** — Idempotent, auditable bash scripts for UFW, auditd, PAM (faillock + pwquality), fail2ban, systemd service hardening, and file permissions.
 - 📸 **Drift Detection** — Compares current system state against a captured baseline. Any drift generates a notification via your OpenClaw-configured channel.
 - 🗺️ **Control Mapping** — Every OpenClaw setting and OS-level recommendation mapped to its 800-53 control ID, in both JSON and Markdown.
@@ -220,7 +220,7 @@ These require documentation review and organizational process audit, not automat
 
 ## Control Coverage
 
-Ubuntu 24.04 LTS + OpenClaw 2026.7.x, run date 2026-08-29:
+Ubuntu 24.04 LTS + OpenClaw 2026.7.x–2026.8.x (tested against 2026.8.2), run date 2026-09-04:
 
 | Family | ID | Checks Emitted | Coverage |
 |--------|----|----------------|----------|
@@ -233,7 +233,7 @@ Ubuntu 24.04 LTS + OpenClaw 2026.7.x, run date 2026-08-29:
 | Agent Safety (Sarge/OpenClaw overlay) | AS | 11 | New |
 | **Total** | | **68** | |
 
-Per-file secrets checks (AC-3), per-service CM-7 checks, and per-class pwquality (IA-5) checks each emit one finding per item, so the total scales with what's on the host — 68 is the number Sarge emits on a normally-provisioned OpenClaw 2026.7 install; a stripped-down VM may show fewer.
+Per-file secrets checks (AC-3), per-service CM-7 checks, and per-class pwquality (IA-5) checks each emit one finding per item, so the total scales with what's on the host — 68 is the number Sarge emits on a normally-provisioned OpenClaw 2026.7–2026.8 install; a stripped-down VM may show fewer.
 
 **AS family (agent-safety overlay):** Sarge-specific checks for the OpenClaw agent-runtime primitives — tool-gate hook installation and mode (AS-1, AS-2), tool-gate decisions ledger and integrity (AS-3, AS-5), daily digest cron (AS-4), workspace attestations (AS-6), skill-workshop review gate (AS-7), and cron-trust registration coverage (AS-8). Every AS check maps to underlying NIST 800-53 Rev 5 controls (AC-3, AC-6, AU-2, AU-9, CM-2, CM-5, CM-6, CM-7, SI-4, SI-7) but they're grouped under AS so operators see the agent-safety posture in one block. AS is agent-scoped — `--host-only` mode skips the whole family.
 
@@ -251,7 +251,7 @@ Per-file secrets checks (AC-3), per-service CM-7 checks, and per-class pwquality
 
 ## Validated Results
 
-Ubuntu 24.04 LTS host, OpenClaw 2026.7.1-2, run date 2026-08-29:
+Ubuntu 24.04 LTS host, OpenClaw 2026.8.2, run date 2026-09-04:
 
 | Status | Count |
 |--------|-------|
