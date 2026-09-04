@@ -181,6 +181,24 @@ for emit_key, path, default in fields:
 PYEOF
 }
 
+# ---------- Control-catalog sync check (shared across platforms) ----------
+#
+# Hashes baseline/controls.json so drift detection can flag when the
+# control catalog changes without a corresponding new snapshot. Path is
+# relative to this file's location (lib/platforms/), not $REPO_ROOT,
+# because this file is sourced from multiple entry points (snapshot.sh,
+# compare.sh, assess.sh) that don't all export REPO_ROOT the same way.
+_sarge_catalog_sync_field() {
+  local catalog="${_SARGE_PLATFORMS_DIR}/../../baseline/controls.json"
+  local hash
+  if [[ ! -r "$catalog" ]] || ! command -v sha256sum &>/dev/null; then
+    echo "catalog_controls_sha256=missing"
+    return 0
+  fi
+  hash=$(sha256sum "$catalog" 2>/dev/null | awk '{print $1}') || true
+  echo "catalog_controls_sha256=${hash:-missing}"
+}
+
 # ---------- Drift field plumbing (shared across platforms) ----------
 #
 # Each platform defines `_<os>_drift_fields` that emits one `key=value`

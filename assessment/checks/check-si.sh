@@ -70,3 +70,38 @@ if [[ -f "$CHECKSUM_FILE" ]]; then
 else
   skipx "SI-7-checksum-mismatch" "SI-7: No CHECKSUMS.sha256 file found — generate with: sha256sum scripts/*.sh assessment/**/*.sh > CHECKSUMS.sha256"
 fi
+
+# SI-7: Software & Information Integrity — package signature verification
+log "SI-7: Package signature verification"
+if ! platform_supports apt_config_available; then
+  skipx "SI-7-package-signing" "SI-7: apt-config inspection is a Debian/Ubuntu construct; not applicable on ${SARGE_OS_DESCRIPTION} — review the platform's native package-signing policy separately"
+elif ! platform apt_config_available; then
+  skipx "SI-7-package-signing" "SI-7: apt-config not available — cannot verify package signature enforcement"
+else
+  ALLOW_UNAUTH=$(platform apt_allow_unauthenticated)
+  TRUSTED_KEYS=$(platform apt_trusted_keys_count)
+  if [[ "$ALLOW_UNAUTH" == "true" ]]; then
+    failx "SI-7-package-signing" "SI-7: APT::Get::AllowUnauthenticated is true — unsigned packages can be installed; unset it or set to false"
+  elif [[ -z "$TRUSTED_KEYS" || "$TRUSTED_KEYS" -eq 0 ]]; then
+    warnx "SI-7-package-signing" "SI-7: no apt trusted GPG keys found under /etc/apt/trusted.gpg.d/ — package signature verification may not be configured"
+  else
+    passx "SI-7-package-signing" "SI-7: apt signature verification enforced (AllowUnauthenticated=${ALLOW_UNAUTH:-unset}, $TRUSTED_KEYS trusted key file(s))"
+  fi
+fi
+
+# SI-16: Memory Protection — ASLR
+log "SI-16: Memory protection (ASLR)"
+if ! platform_supports aslr_setting; then
+  skipx "SI-16-aslr" "SI-16: /proc/sys/kernel/randomize_va_space is a Linux-specific control; review ${SARGE_OS_DESCRIPTION}'s native memory-protection posture separately"
+else
+  ASLR=$(platform aslr_setting)
+  if [[ -z "$ASLR" ]]; then
+    warnx "SI-16-aslr" "SI-16: could not read /proc/sys/kernel/randomize_va_space"
+  elif [[ "$ASLR" -eq 2 ]]; then
+    passx "SI-16-aslr" "SI-16: ASLR is fully enabled (randomize_va_space=2)"
+  elif [[ "$ASLR" -eq 1 ]]; then
+    warnx "SI-16-aslr" "SI-16: ASLR is only partially enabled (randomize_va_space=1) — set to 2 for full randomization"
+  else
+    failx "SI-16-aslr" "SI-16: ASLR is disabled (randomize_va_space=$ASLR) — enable it: sudo sysctl -w kernel.randomize_va_space=2"
+  fi
+fi

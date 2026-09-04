@@ -138,3 +138,87 @@ if platform sshd_active; then
     fi
   fi
 fi
+
+# CM-3: Configuration Change Control — is ~/.openclaw under version control?
+#
+# Two acceptable signals: the config directory itself is a git working
+# tree, or Sarge's own drift-snapshot tracking (drift/snapshot.sh) has a
+# baseline recorded so unreviewed changes are at least detectable.
+log "CM-3: Configuration change control"
+CM3_SNAPSHOT_DIR="${SARGE_SNAPSHOT_DIR:-$HOME/.sarge/snapshots}"
+if [[ -d "$HOME/.openclaw/.git" ]]; then
+  passx "CM-3-change-control" "CM-3: ~/.openclaw is under version control (.git present)"
+elif [[ -e "$CM3_SNAPSHOT_DIR/latest.json" ]]; then
+  passx "CM-3-change-control" "CM-3: Sarge drift-snapshot tracking is enabled ($CM3_SNAPSHOT_DIR/latest.json found)"
+else
+  warnx "CM-3-change-control" "CM-3: ~/.openclaw is not under version control and no Sarge drift snapshot was found — run drift/snapshot.sh or git-init ~/.openclaw to track configuration changes"
+fi
+
+# CM-5: Access Restrictions for Change — OpenClaw config file ownership
+#
+# Same openclaw.json -> config.json fallback used throughout check-ac.sh /
+# check-ia.sh / check-sa.sh (issue #61).
+log "CM-5: Access restrictions for change"
+CM5_USER=$(whoami)
+CM5_OC_CONFIG=""
+for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+  if [[ -f "$candidate" ]]; then
+    CM5_OC_CONFIG="$candidate"
+    break
+  fi
+done
+if [[ -n "$CM5_OC_CONFIG" ]]; then
+  CM5_CONFIG_NAME=$(basename "$CM5_OC_CONFIG")
+  CM5_OWNER=$(platform file_owner "$CM5_OC_CONFIG")
+  if [[ "$CM5_OWNER" == "$CM5_USER" ]]; then
+    passx "CM-5-config-owner" "CM-5: $CM5_CONFIG_NAME is owned by $CM5_USER (the agent account)"
+  elif [[ "$CM5_OWNER" == "root" ]]; then
+    failx "CM-5-config-owner" "CM-5: $CM5_CONFIG_NAME is owned by root, not the agent account ($CM5_USER) — the agent account cannot manage its own configuration under least-privilege change control"
+  else
+    warnx "CM-5-config-owner" "CM-5: $CM5_CONFIG_NAME is owned by $CM5_OWNER, not the current user ($CM5_USER) — verify this is intentional"
+  fi
+else
+  skipx "CM-5-config-owner" "CM-5: OpenClaw config not found at ~/.openclaw/openclaw.json (or legacy ~/.openclaw/config.json)"
+fi
+
+# CM-8: System Component Inventory — Node.js runtime + MCP servers + plugins
+#
+# Informational: lists what's installed so operators can reconcile against
+# an approved component list. Always PASS — absence of an inventory tool
+# (jq/python3) is noted in the message rather than escalated, matching how
+# SA-9 treats the same jq/python3 fallback (check-sa.sh).
+log "CM-8: System component inventory"
+CM8_NODE_VER=$(node --version 2>/dev/null || echo "not found")
+CM8_OC_CONFIG=""
+for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+  if [[ -f "$candidate" ]]; then
+    CM8_OC_CONFIG="$candidate"
+    break
+  fi
+done
+CM8_MCP_COUNT="unknown"
+CM8_PLUGIN_COUNT="unknown"
+if [[ -n "$CM8_OC_CONFIG" ]] && command -v jq &>/dev/null; then
+  CM8_MCP_COUNT=$(jq -r '(.mcp.servers // {}) | to_entries | map(select(.key | startswith("_") | not)) | length' "$CM8_OC_CONFIG" 2>/dev/null)
+  CM8_PLUGIN_COUNT=$(jq -r '(.plugins.entries // .plugins // {}) | (if type=="object" then (keys|length) elif type=="array" then length else 0 end)' "$CM8_OC_CONFIG" 2>/dev/null)
+fi
+passx "CM-8-component-inventory" "CM-8: Node.js ${CM8_NODE_VER}, ${CM8_MCP_COUNT} MCP server(s), ${CM8_PLUGIN_COUNT} plugin(s) configured — review against the approved component list"
+
+# CM-11: User-Installed Software — globally-installed npm packages
+#
+# Global npm packages sit outside the OpenClaw workspace tree and outside
+# package.json-tracked dependencies, so they're a common source of
+# unreviewed user-installed software. npm itself and anything with
+# "openclaw" in the name are expected and excluded.
+log "CM-11: User-installed software (global npm packages)"
+if command -v npm &>/dev/null; then
+  CM11_GLOBAL=$(npm list -g --depth=0 2>/dev/null | tail -n +2 | sed -E 's/^[├└──│ ]+//' | grep -vE '^\s*$')
+  CM11_UNEXPECTED=$(echo "$CM11_GLOBAL" | grep -viE '^npm@|openclaw' || true)
+  if [[ -z "$CM11_UNEXPECTED" ]]; then
+    passx "CM-11-global-npm-packages" "CM-11: No unexpected globally-installed npm packages found outside the OpenClaw tree"
+  else
+    warnx "CM-11-global-npm-packages" "CM-11: Unexpected global npm packages found — review: $(echo "$CM11_UNEXPECTED" | tr '\n' '|')"
+  fi
+else
+  skipx "CM-11-global-npm-packages" "CM-11: npm not found on PATH — global package inventory check skipped"
+fi

@@ -14,7 +14,7 @@ Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool,
 
 ## What Sarge Does
 
-- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **68 checks across 7 control groups** (6 NIST families + AS agent-safety overlay) on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x.
+- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **63 controls across 12 NIST families + AS agent-safety overlay** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x. See [NIST 800-53 Rev 5 Control Coverage](#nist-800-53-rev-5-control-coverage) below for the full per-control breakdown.
 - 🔒 **Hardening Scripts** — Idempotent, auditable bash scripts for UFW, auditd, PAM (faillock + pwquality), fail2ban, systemd service hardening, and file permissions.
 - 📸 **Drift Detection** — Compares current system state against a captured baseline. Any drift generates a notification via your OpenClaw-configured channel.
 - 🗺️ **Control Mapping** — Every OpenClaw setting and OS-level recommendation mapped to its 800-53 control ID, in both JSON and Markdown.
@@ -77,6 +77,144 @@ pwsh assessment/assess.ps1 --host-only
 ```
 
 In host-only mode, agent-scoped findings are excluded entirely (not even SKIP — they're out of scope). The report header states which mode the run used. See [#50](https://github.com/oscarsixsecllc/sarge/issues/50) for details.
+
+---
+
+## NIST 800-53 Rev 5 Control Coverage
+
+Sarge's baseline (`baseline/controls.json`) documents 63 individual NIST 800-53 Rev 5 controls across 12 families. Each control lists the exact OpenClaw settings and OS-level checks Sarge inspects, plus remediation guidance.
+
+### Summary by family
+
+- **AC — Access Control** — 12 controls — Partial (11 full, 1 partial)
+- **AU — Audit and Accountability** — 10 controls — Full
+- **CM — Configuration Management** — 7 controls — Partial (6 full, 1 partial)
+- **IA — Identification and Authentication** — 7 controls — Full
+- **SC — System and Communications Protection** — 11 controls — Full
+- **SI — System and Information Integrity** — 7 controls — Partial (4 full, 3 partial)
+- **CP — Contingency Planning** — 2 controls — Partial (1 full, 1 partial)
+- **CA — Assessment, Authorization, and Monitoring** — 2 controls — Partial (1 full, 1 partial)
+- **SA — System and Services Acquisition** — 2 controls — Partial (both partial)
+- **MP — Media Protection** — 1 control — Partial
+- **SR — Supply Chain Risk Management** — 1 control — Partial
+- **RA — Risk Assessment** — 1 control — Full
+
+"Full" means the control has a fully automatable check with a concrete pass/fail verdict. "Partial" means Sarge checks what it can automate, but part of the control (a policy decision, an external agreement, or something outside what a scanner can verify) still needs human review.
+
+---
+
+### AC — Access Control (12 controls)
+
+- **AC-2 — Account Management** (full) — Checks `agents.allowlist`, `channels.*.allowedUsers`, `gateway.nodes.pairing.autoApproveCidrs`; OS: `getent passwd`, `lastlog`, `who`. Remediation: remove unused accounts, restrict the OpenClaw allowlist to named users only.
+- **AC-3 — Access Enforcement** (full) — Checks `tools.fs.workspaceOnly`, `agents.defaults.sandbox.mode`, `browser.attachOnly`, `browser.noSandbox`, `browser.evaluateEnabled`, `hooks.allowRequestSessionKey`, `hooks.allowedAgentIds`, `commands.ownerAllowFrom`, `gateway.controlUi.allowedOrigins`, `gateway.controlUi.allowInsecureAuth`, `approvals.exec.enabled`, `acp.allowedAgents`, `tools.codeMode.enabled`, `tools.sandbox.tools.alsoAllow`, `gateway.nodes.allowCommands`, `gateway.nodes.denyCommands`, `nodeHost.browserProxy.enabled`, `nodeHost.browserProxy.allowProfiles`, `crestodian.rescue.ownerDmOnly`, `talk.realtime.consultRouting`; OS: file permissions on `~/.openclaw/`, sudoers review. Remediation: set `workspaceOnly=true`, set sandbox mode to `all`, restrict sudoers, disable browser `noSandbox`, set `hooks.allowRequestSessionKey=false`.
+- **AC-4 — Information Flow Enforcement** (full) — Checks `session.dmScope`, `messages.groupChat.visibleReplies`, `tools.web.search.enabled`, `tools.web.fetch.enabled`, `diagnostics.otel.captureContent.enabled`, `broadcast.strategy`, `acp.stream.maxOutputChars`, `surfaces.*.silentReply`. Remediation: set `session.dmScope` to `per-channel-peer`, review `tools.web` settings, disable `diagnostics.otel.captureContent` unless the collector is within your data boundary.
+- **AC-5 — Separation of Duties** (full) — OS: `whoami`, `groups <user>`. Remediation: run OpenClaw under a dedicated service account that is not a member of the sudo/admin group.
+- **AC-6 — Least Privilege** (full) — Checks `tools.exec.elevated`, `agents.defaults.sandbox.mode`, `agents.defaults.subagents.allowChildOverrides`, `gateway.terminal.enabled`, `browser.evaluateEnabled`; OS: `sudo -l`, `groups <user>`. Remediation: disable elevated exec unless required, confirm the service account has no unnecessary group memberships, set `subagents.allowChildOverrides=false`, disable the gateway terminal.
+- **AC-7 — Unsuccessful Logon Attempts** (full) — Checks `gateway.auth.rateLimit.maxAttempts`, `gateway.auth.rateLimit.windowMs`, `gateway.auth.rateLimit.lockoutMs`, `auth.cooldowns`; OS: `pam_faillock status`. Remediation: configure `gateway.auth.rateLimit` (maxAttempts=10, windowMs=60000, lockoutMs=300000), configure PAM faillock.
+- **AC-8 — System Use Notification** (full) — OS: `grep ^Banner /etc/ssh/sshd_config`. Remediation: set a `Banner` directive in `sshd_config` pointing to a system-use notification file.
+- **AC-10 — Concurrent Session Control** (partial) — OS: `grep maxlogins /etc/security/limits.conf`. Remediation: set a `maxlogins` limit in `/etc/security/limits.conf` to bound concurrent sessions per user.
+- **AC-11 — Device Lock** (full) — OS: `grep TMOUT /etc/profile /etc/profile.d/*`. Remediation: set `TMOUT` in `/etc/profile` or `/etc/profile.d/` to auto-lock idle shell sessions.
+- **AC-12 — Session Termination** (full) — Checks `mcp.sessionIdleTtlMs`, `agents.defaults.subagents.archiveAfterMinutes`, `cron.sessionRetention`, `acp.runtime.ttlMinutes`, `crestodian.rescue.pendingTtlMinutes`. Remediation: set `mcp.sessionIdleTtlMs` to 600000 (10 min), set `subagents.archiveAfterMinutes` to 60, review `cron.sessionRetention`.
+- **AC-14 — Permitted Actions Without Identification or Authentication** (full) — Checks `auth.enabled`. Remediation: set `auth.enabled` to `true` so gateway actions require identification/authentication.
+- **AC-17 — Remote Access** (full) — Checks `gateway.bind`, `gateway.auth.mode`, `gateway.auth.rateLimit`, `gateway.controlUi.allowedOrigins`, `gateway.terminal.enabled`, `hooks.enabled`; OS: `ufw status`, `ss -tlnp`. Remediation: bind the gateway to loopback, enable `gateway.auth.mode=token`, set an auth rate limit, disable external hooks and the gateway terminal.
+
+### AU — Audit and Accountability (10 controls)
+
+- **AU-2 — Event Logging** (full) — Checks `logging.level`, `logging.destination`; OS: `systemctl status auditd`, `auditctl -l`. Remediation: enable auditd, set OpenClaw logging level to `info` or higher.
+- **AU-3 — Content of Audit Records** (full) — Checks `logging.includeTimestamp`, `logging.includeUser`; OS: `ausearch -m LOGIN`, `last`. Remediation: ensure audit records include timestamp, user, action, and outcome.
+- **AU-4 — Audit Log Storage Capacity** (full) — OS: `df -P /var/log/audit`, `df -P /var/log`. Remediation: keep at least 10% free space on the audit log partition; configure log rotation with adequate headroom or expand storage.
+- **AU-5 — Response to Audit Processing Failures** (full) — OS: `grep disk_full_action /etc/audit/auditd.conf`, `grep admin_space_left_action /etc/audit/auditd.conf`. Remediation: set `disk_full_action` and `admin_space_left_action` to something other than `IGNORE` (e.g. `SYSLOG`, `EMAIL`, `HALT`).
+- **AU-6 — Audit Review, Analysis, and Reporting** (full) — Checks `security.audit.suppressions`; OS: `auditctl -l`. Remediation: review every `security.audit.suppressions` entry — each suppression must be justified and periodically reviewed, or it creates a blind spot.
+- **AU-7 — Audit Record Reduction and Report Generation** (full) — OS: `which journalctl`, `which ausearch`, `grep -r '@' /etc/rsyslog.d/`. Remediation: install auditd (provides `ausearch`) or configure rsyslog forwarding so audit records can be queried and aggregated.
+- **AU-8 — Time Stamps** (full) — OS: `timedatectl show -p NTPSynchronized`, `chronyc tracking`. Remediation: enable NTP sync — `sudo timedatectl set-ntp true`.
+- **AU-9 — Protection of Audit Information** (full) — Checks `agents.defaults.compaction.mode`, `agents.defaults.compaction.memoryFlush.enabled`, `logging.redactSensitive`; OS: `ls -la /var/log/audit/`, `stat /var/log/audit/audit.log`. Remediation: audit logs must be owned by root, mode 600; restrict write access.
+- **AU-11 — Audit Record Retention** (full) — OS: `grep rotate /etc/logrotate.d/auditd`. Remediation: configure logrotate for audit logs with a `rotate` count of at least 4 (weekly rotation) for minimum retention.
+- **AU-12 — Audit Record Generation** (full) — Checks `logging.auditActions`, `transcripts.enabled`, `transcripts.autoStart`; OS: `auditctl -l | grep openclaw`. Remediation: add auditd watch rules for `~/.openclaw/secrets/` and OpenClaw config files; review `transcripts.autoStart` sources.
+
+### CM — Configuration Management (7 controls)
+
+- **CM-2 — Baseline Configuration** (full) — Checks `*` (all settings against baseline); OS: `dpkg --get-selections`, `systemctl list-units --state=enabled`. Remediation: maintain `openclaw.json.baseline` as the documented configuration baseline.
+- **CM-3 — Configuration Change Control** (full) — Checks `gateway.reload.mode`, `update.auto.enabled`, `commands.restart`. Remediation: set `gateway.reload.mode` to `hybrid`, disable `update.auto` unless `stableDelayHours >= 6`, review restart command availability.
+- **CM-5 — Access Restrictions for Change** (full) — Checks `skills.workshop.approvalPolicy`, `skills.install.allowUploadedArchives`, `skills.workshop.allowSymlinkTargetWrites`, `plugins.entries`. Remediation: set `skills.workshop.approvalPolicy` to `review`, disable `allowUploadedArchives` and `allowSymlinkTargetWrites`, review plugin entries for `hooks.allowPromptInjection`.
+- **CM-6 — Configuration Settings** (full) — Checks `tools.fs.workspaceOnly`, `agents.defaults.sandbox.mode`, `gateway.bind`, `models.mode`, `session.dmScope`, `messages.groupChat.visibleReplies`, `cron.maxConcurrentRuns`; OS: `ufw status verbose`, `sshd -T | grep -i permit`. Remediation: apply all settings in `openclaw.json.baseline` and all Sarge hardening scripts; verify `models.mode`, `session.dmScope`, and cron settings match baseline.
+- **CM-7 — Least Functionality** (full) — Checks `plugins.entries`, `plugins.slots`, `tools.web`, `tools.codeMode.enabled`, `skills.entries`, `skills.workshop.approvalPolicy`, `skills.install.allowUploadedArchives`, `skills.load.allowSymlinkTargets`, `browser.enabled`, `browser.evaluateEnabled`, `browser.ssrfPolicy`, `mcp.servers`, `discovery.mdns.mode`, `gateway.http.endpoints.chatCompletions.enabled`, `gateway.http.endpoints.responses.enabled`, `gateway.tools.deny`, `gateway.tools.allow`, `commitments.enabled`, `security.installPolicy.enabled`, `marketplaces.feeds`, `marketplaces.sources`, `audio.transcription.command`; OS: `systemctl list-units --state=enabled`, `apt list --installed`. Remediation: disable unused plugins/skills/tools, set `skills.workshop.approvalPolicy=review`, disable the browser unless needed, set `discovery.mdns.mode=minimal`, remove unnecessary OS packages.
+- **CM-8 — System Component Inventory** (full) — Checks `mcp.servers`, `plugins.entries`; OS: `node --version`. Remediation: maintain an approved component list and reconcile it against the reported Node.js version, MCP servers, and plugins.
+- **CM-11 — User-Installed Software** (partial) — OS: `npm list -g --depth=0`. Remediation: review globally-installed npm packages and remove any not approved for the host.
+
+### IA — Identification and Authentication (7 controls)
+
+- **IA-2 — Identification and Authentication (Org Users)** (full) — Checks `channels.*.allowedUsers`; OS: `pam_faillock status`, `grep pam_faillock /etc/pam.d/common-auth`. Remediation: enable PAM faillock; restrict OpenClaw to authenticated Discord/channel users only.
+- **IA-4 — Identifier Management** (full) — OS: `awk -F: '{print $3}' /etc/passwd | sort | uniq -d`. Remediation: eliminate duplicate UIDs in `/etc/passwd`; never reuse a UID after deleting an account.
+- **IA-5 — Authenticator Management** (full) — Checks `auth.profiles`, `auth.order`, `auth.cooldowns`, `secrets.providers`, `gateway.auth.token`; OS: `grep minlen /etc/security/pwquality.conf`, `grep PASS_MAX_DAYS /etc/login.defs`. Remediation: set pwquality `minlen=12` plus complexity rules; set `PASS_MAX_DAYS=90`, `PASS_MIN_DAYS=1`.
+- **IA-6 — Authentication Feedback** (full) — OS: `grep pam_unix /etc/pam.d/common-auth`. Remediation: ensure login failure messages don't reveal whether the username or password was wrong.
+- **IA-7 — Cryptographic Module Authentication** (full) — Checks `gateway.tls`; OS: `grep Protocol /etc/ssh/sshd_config`, `grep Ciphers /etc/ssh/sshd_config`. Remediation: disable SSHv1 and weak ciphers (3DES, RC4/arcfour, CBC-mode) in `sshd_config`; set gateway TLS `minVersion` to TLSv1.2 or higher.
+- **IA-8 — Identification and Authentication (Non-Org Users)** (full) — Checks `auth.mode`, `auth.providers`. Remediation: set an explicit `auth.mode`, register `auth.providers`, and disable anonymous access so external channel users (Discord/Telegram/etc.) are identified before gateway trust.
+- **IA-11 — Re-authentication** (full) — Checks `mcp.sessionIdleTtlMs`. Remediation: set `mcp.sessionIdleTtlMs` to a finite, reasonable value (e.g. 24h or less) so idle sessions require re-authentication.
+
+### SC — System and Communications Protection (11 controls)
+
+- **SC-2 — Application Partitioning** (full) — OS: `ps aux`, `readlink /proc/PID/ns/mnt`. Remediation: run OpenClaw under a dedicated non-root service account; consider container or namespace isolation.
+- **SC-4 — Information in Shared Resources** (full) — OS: `find /tmp -name *openclaw*`, `ls /dev/shm`. Remediation: configure periodic cleanup of `/tmp` session data; review `/dev/shm` for sensitive residue.
+- **SC-5 — Denial-of-Service Protection** (full) — Checks `models.rateLimit`, `agents.defaults.maxConcurrent`, `agents.defaults.subagents.maxConcurrent`, `cron.maxConcurrentRuns`, `gateway.auth.rateLimit`, `acp.maxConcurrentSessions`, `acp.stream.maxOutputChars`, `audio.transcription.timeoutSeconds`; OS: `ufw status`. Remediation: set per-model rate limits, bound `maxConcurrent` to 4 for agents / 8 for subagents, set `cron.maxConcurrentRuns` to 8.
+- **SC-7 — Boundary Protection** (full) — Checks `browser.ssrfPolicy.dangerouslyAllowPrivateNetwork`, `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback`, `discovery.mdns.mode`, `hooks.enabled`, `gateway.tailscale.mode`, `proxy.enabled`, `proxy.loopbackMode`, `nodeHost.browserProxy.enabled`, `web.enabled`; OS: `ufw status`, `ss -tlnp`. Remediation: set `browser.ssrfPolicy.dangerouslyAllowPrivateNetwork=false`, set `discovery.mdns.mode=minimal`, disable external hooks unless required.
+- **SC-8 — Transmission Confidentiality and Integrity** (full) — Checks `gateway.tls.enabled`, `gateway.controlUi.allowInsecureAuth`, `mcp.servers`; OS: `ss -tlnp`, `openssl s_client -connect localhost:18790`. Remediation: enable TLS on the gateway; use Cloudflare Tunnel (TLS enforced) for all remote access.
+- **SC-12 — Cryptographic Key Establishment and Management** (full) — OS: `stat ~/.openclaw/secrets/*.key`, `stat ~/.ssh/id_*`. Remediation: all key/credential files must be 600 or 400; SSH private keys must be 600.
+- **SC-13 — Cryptographic Protection** (full) — OS: `openssl version`, `node --version`. Remediation: use OpenSSL 1.1+ or 3.x for FIPS capability; Node.js 18+ enforces TLS 1.2+ by default.
+- **SC-15 — Collaborative Computing Devices** (full) — Checks `nodes.*.capabilities.camera`, `nodes.*.capabilities.microphone`; OS: `v4l2-ctl --list-devices`, `ls /dev/video*`. Remediation: disable camera/microphone capabilities in `openclaw.json` unless required; remove `/dev/video*` access for the agent user.
+- **SC-23 — Session Authenticity** (full) — Checks `auth.enabled`, `gatewayToken`. Remediation: set `auth.enabled: true` and configure a strong `gatewayToken`.
+- **SC-28 — Protection of Information at Rest** (full) — Checks `memory.encryption`, `secrets.providers`, `logging.redactSensitive`, `diagnostics.otel.captureContent.enabled`, `diagnostics.cacheTrace.enabled`, `env`, `media.preserveFilenames`, `media.ttlHours`; OS: `stat ~/.openclaw/secrets/`, `ls -la ~/.openclaw/`. Remediation: secrets directory must be 700; all secret files must be 600; owner must be the service account only.
+- **SC-39 — Process Isolation** (full) — OS: `cat /proc/PID/cgroup`, `readlink /proc/PID/ns/{pid,net,mnt}`. Remediation: run OpenClaw in a container or systemd slice with resource limits; use network and PID namespaces to isolate the agent.
+
+### SI — System and Information Integrity (7 controls)
+
+- **SI-2 — Flaw Remediation** (partial) — OS: `apt list --upgradable`, `unattended-upgrades --dry-run`. Remediation: enable unattended-upgrades for security patches; review and apply pending updates.
+- **SI-3 — Malicious Code Protection** (partial) — OS: `which clamav`, `systemctl status clamav-daemon`. Remediation: install and configure ClamAV or equivalent; schedule regular scans.
+- **SI-4 — Information System Monitoring** (full) — Checks `diagnostics.enabled`, `audit.enabled`, `cron.failureAlert.enabled`, `security.audit.suppressions`; OS: `systemctl status auditd`. Remediation: enable diagnostics, audit, and `cron.failureAlert`; enable auditd on the host; review `security.audit.suppressions` for blind spots.
+- **SI-7 — Software, Firmware, and Information Integrity** (partial) — OS: `apt-config dump | grep -i AllowUnauthenticated`, `ls /etc/apt/trusted.gpg.d/`. Remediation: ensure `APT::Get::AllowUnauthenticated` is unset or false; verify apt repository GPG keys are configured under `/etc/apt/trusted.gpg.d/`.
+- **SI-12 — Information Management and Retention** (full) — Checks `agents.defaults.compaction.mode`, `agents.defaults.compaction.memoryFlush.enabled`, `agents.defaults.compaction.truncateAfterCompaction`, `transcripts.enabled`, `transcripts.maxUtterances`, `media.ttlHours`. Remediation: set `compaction.mode` to `safeguard`, enable `memoryFlush` and `truncateAfterCompaction`, review `transcripts.maxUtterances` and `media.ttlHours` retention bounds.
+- **SI-16 — Memory Protection** (full) — OS: `cat /proc/sys/kernel/randomize_va_space`. Remediation: set `kernel.randomize_va_space=2` for full ASLR — `sudo sysctl -w kernel.randomize_va_space=2`.
+- **SI-17 — Fail-Safe Procedures** (full) — Checks `cron.retry.maxAttempts`, `crestodian.rescue.enabled`, `crestodian.rescue.pendingTtlMinutes`. Remediation: bound `cron.retry.maxAttempts`; if crestodian rescue is enabled, set a short `pendingTtlMinutes`.
+
+### CP — Contingency Planning (2 controls)
+
+- **CP-9 — System Backup** (partial) — OS: `crontab -l | grep -i backup`, `systemctl list-timers --all | grep -i backup`. Remediation: configure a scheduled backup (cron or systemd timer) of `~/.openclaw` config, secrets, and workspace state; verify backups are recoverable.
+- **CP-10 — System Recovery and Reconstitution** (full) — Checks `crestodian.rescue.enabled`, `crestodian.rescue.ownerDmOnly`, `crestodian.rescue.pendingTtlMinutes`. Remediation: if rescue mode is enabled, restrict to `ownerDmOnly=true`; set `pendingTtlMinutes` to a short window (5 min default) to prevent stale rescue state.
+
+### CA — Assessment, Authorization, and Monitoring (2 controls)
+
+- **CA-7 — Continuous Monitoring** (full) — Checks `security.installPolicy.enabled`, `security.audit.suppressions`, `diagnostics.enabled`; OS: `systemctl status auditd`, `unattended-upgrades --dry-run`. Remediation: enable `security.installPolicy`, review audit suppressions, enable diagnostics.
+- **CA-9 — Internal System Connections** (partial) — Checks `mcp.servers`; OS: parse `~/.openclaw/openclaw.json` `mcp.servers`. Remediation: document each MCP server connection in the system security plan / interconnection agreements; remove any unused or unauthorized servers.
+
+### SA — System and Services Acquisition (2 controls)
+
+- **SA-9 — External System Services** (partial) — Checks `mcp.servers`. Remediation: review each configured `mcp.servers` entry for a data-sharing agreement and supply-chain risk assessment; remove servers that are no longer needed.
+- **SA-22 — Unsupported System Components** (partial) — OS: `cat /etc/os-release`, `node --version`. Remediation: upgrade Ubuntu and Node.js before their end-of-life dates; track EOL schedules at endoflife.date.
+
+### MP — Media Protection (1 control)
+
+- **MP-6 — Media Sanitization** (partial) — Checks `media.ttlHours`, `media.maxSizeMb`. Remediation: set `media.ttlHours` to a positive retention window and `media.maxSizeMb` to bound stored media size in the OpenClaw config.
+
+### SR — Supply Chain Risk Management (1 control)
+
+- **SR-11 — Component Authenticity** (partial) — OS: `ls ~/.openclaw/skills`, `ls /etc/apt/trusted.gpg.d/`. Remediation: add source/author/origin metadata to installed skills; verify APT package signing keys are present under `/etc/apt/trusted.gpg.d/`.
+
+### RA — Risk Assessment (1 control)
+
+- **RA-5 — Vulnerability Monitoring and Scanning** (full) — OS: `trivy`/`grype`/`oscap`/`lynis`/`debsecan`, `npm audit`, `apt list --upgradable`. Remediation: install a vulnerability scanner (trivy or grype recommended), run `npm audit` on OpenClaw dependencies, apply pending OS security patches.
+
+### Families not covered
+
+Sarge does not attempt to automate 7 of the 19 NIST 800-53 Rev 5 families, because they're organizational, administrative, or physical-security controls that a host/config scanner cannot meaningfully verify:
+
+- **AT — Awareness and Training** — training program content and completion tracking, not a system state.
+- **IR — Incident Response** — response plans, playbooks, and tabletop exercises are process artifacts, not scannable config.
+- **MA — Maintenance** — maintenance scheduling, tooling, and personnel controls.
+- **PE — Physical and Environmental Protection** — facility access, environmental controls — not visible to a host-level scan.
+- **PL — Planning** — system security plans and policy documents.
+- **PM — Program Management** — organization-wide security program governance.
+- **PS — Personnel Security** — background checks, termination procedures, personnel screening.
+
+These require documentation review and organizational process audit, not automated scanning — they're out of scope for a tool that inspects OpenClaw config and OS state.
 
 ---
 

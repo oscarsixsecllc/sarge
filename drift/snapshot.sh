@@ -29,6 +29,19 @@ export SARGE_RUN_ID SARGE_RUN_ROOT
 
 echo "[Sarge] Taking baseline snapshot..."
 
+# Tamper-evident snapshot chain (issue: hash-chained snapshots). Hash the
+# outgoing latest.json (resolved through the symlink) BEFORE it gets
+# overwritten below, so each new snapshot records the hash of its
+# predecessor. A follow-up modification to any earlier snapshot file
+# breaks the chain because the *next* snapshot's recorded hash no longer
+# matches the tampered file — compare.sh checks this (see [CHAIN] logic).
+# First-ever snapshot (no prior latest.json) records "none".
+PREVIOUS_HASH="none"
+if [[ -e "$SNAPSHOT_DIR/latest.json" ]] && command -v sha256sum &>/dev/null; then
+  PREVIOUS_HASH=$(sha256sum "$SNAPSHOT_DIR/latest.json" 2>/dev/null | awk '{print $1}') || true
+  PREVIOUS_HASH="${PREVIOUS_HASH:-none}"
+fi
+
 # Platform-specific fields are emitted by `platform drift_snapshot_fields`
 # (defined in lib/platforms/<os>.sh). Nesting under "fields" lets compare.sh
 # enumerate what was captured and lets us evolve per-platform field sets
@@ -39,6 +52,7 @@ cat > "$SNAPSHOT_FILE" <<EOF
   "platform": "${SARGE_OS}",
   "host": "$(hostname)",
   "kernel": "$(uname -r)",
+  "previous_hash": "${PREVIOUS_HASH}",
   "os": "${SARGE_OS_DESCRIPTION}",
   "fields": {
 $(platform drift_snapshot_fields)

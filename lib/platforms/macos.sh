@@ -157,6 +157,14 @@ macos_port_listening() {
 #   audit_daemon_active, auditctl_available, audit_rules,
 #   audit_log_path, journal_disk_usage
 #
+# Same rationale extends to the AU-4/5/7/8/11 probes added for issue #72
+# (log_partition_free_pct, auditd_config_path, auditd_config_value,
+# journalctl_available, ausearch_available, syslog_forwarding_configured,
+# time_sync_active, time_sync_status_text, logrotate_audit_config_path,
+# logrotate_rotate_count) — auditd.conf, logrotate, and journalctl/
+# ausearch are Linux constructs with no macOS analog; NTP/time sync on
+# macOS is MDM/System Settings-managed, not shell-probeable the same way.
+#
 # Unified Logging (`log`) is always-on on macOS — there is no "off"
 # state — so AU-2 "system logging exists" is structurally satisfied.
 # We map system_logger_active to a successful exit so check-au.sh's
@@ -249,6 +257,7 @@ macos_verify_checksums() { shasum -a 256 -c "$1" --quiet 2>/dev/null; }
 # from grep/awk when there's no match).
 _macos_drift_fields() {
   local fw perm sshd_state sshd_conf permit_root pw_auth sip
+  local dup_uid_count ssh_protocol_1 ia_oc_config auth_mode session_idle_ttl
   fw=$(macos_firewall_status_text 2>/dev/null | head -1 | tr -d '\n') || true
   perm=$(stat -f '%A' "$HOME/.openclaw" 2>/dev/null) || true
   if launchctl print system/com.openssh.sshd &>/dev/null; then
@@ -260,14 +269,40 @@ _macos_drift_fields() {
   if [[ -r "$sshd_conf" ]]; then
     permit_root=$(grep -iE '^PermitRootLogin' "$sshd_conf" 2>/dev/null | awk '{print $2}' | head -1) || true
     pw_auth=$(grep -iE '^PasswordAuthentication' "$sshd_conf" 2>/dev/null | awk '{print $2}' | head -1) || true
+    if grep -qiE "^[[:space:]]*Protocol[[:space:]]+1(\b|,)" "$sshd_conf" 2>/dev/null; then
+      ssh_protocol_1="yes"
+    else
+      ssh_protocol_1="no"
+    fi
   fi
   sip=$(csrutil status 2>/dev/null | awk -F': ' '/status:/{print $2}' | tr -d '.') || true
+  # IA-4: duplicate UID count (identifier reuse signal). /etc/passwd on
+  # macOS only carries local accounts (Open Directory holds the rest),
+  # but a duplicate here is still a hygiene signal worth tracking.
+  dup_uid_count=$(awk -F: '{print $3}' /etc/passwd 2>/dev/null | sort | uniq -d | wc -l | tr -d '[:space:]') || true
+  # IA-8 / IA-11: OpenClaw gateway auth mode + session idle TTL. Same
+  # openclaw.json -> config.json fallback used by check-ia.sh and
+  # check-sc.sh (issue #61).
+  for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+    if [[ -f "$candidate" ]]; then
+      ia_oc_config="$candidate"
+      break
+    fi
+  done
+  if [[ -n "${ia_oc_config:-}" ]]; then
+    auth_mode=$(grep -oE '"mode"[[:space:]]*:[[:space:]]*"[^"]*"' "$ia_oc_config" 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)"$/\1/') || true
+    session_idle_ttl=$(grep -oE '"sessionIdleTtlMs"[[:space:]]*:[[:space:]]*[0-9]+' "$ia_oc_config" 2>/dev/null | grep -oE '[0-9]+$' | head -1) || true
+  fi
   echo "firewall_status=${fw:-unknown}"
   echo "openclaw_dir_perm=${perm:-unknown}"
   echo "sshd_active=${sshd_state}"
   echo "ssh_permit_root_login=${permit_root:-unset}"
   echo "ssh_password_auth=${pw_auth:-unset}"
   echo "system_integrity_protection=${sip:-unknown}"
+  echo "duplicate_uid_count=${dup_uid_count:-unknown}"
+  echo "ssh_protocol_1_configured=${ssh_protocol_1:-unknown}"
+  echo "gateway_auth_mode=${auth_mode:-unknown}"
+  echo "gateway_session_idle_ttl_ms=${session_idle_ttl:-unknown}"
 
   # OpenClaw config surface (shared across platforms, defined in _dispatch.sh)
   _sarge_openclaw_config_drift_fields

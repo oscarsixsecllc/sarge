@@ -119,6 +119,113 @@ fi
 [[ "$dc" -gt 0 ]] || fail "drift-report.json drift_count should be > 0, got $dc"
 ok "drift-report.json shows drift_count > 0"
 
+# --- File integrity hash fields (issue: file hashing) ---
+for field in openclaw_json_sha256 sshd_config_sha256 pam_common_auth_sha256 \
+             audit_rules_sha256 ufw_rules_sha256; do
+  if command -v jq &>/dev/null; then
+    val=$(jq -r ".fields.${field} // empty" "$LATEST" 2>/dev/null)
+  else
+    val=$(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+v=d.get('fields',{}).get(sys.argv[2])
+if v is not None: print(v)
+" "$LATEST" "$field" 2>/dev/null)
+  fi
+  [[ -n "$val" ]] || fail "snapshot JSON missing file-hash field: $field"
+done
+ok "snapshot JSON has file-integrity hash fields"
+
+# --- Package/service inventory hashes (issue: inventory tracking) ---
+for field in installed_packages_sha256 enabled_services_sha256; do
+  if command -v jq &>/dev/null; then
+    val=$(jq -r ".fields.${field} // empty" "$LATEST" 2>/dev/null)
+  else
+    val=$(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+v=d.get('fields',{}).get(sys.argv[2])
+if v is not None: print(v)
+" "$LATEST" "$field" 2>/dev/null)
+  fi
+  [[ -n "$val" ]] || fail "snapshot JSON missing inventory-hash field: $field"
+done
+ok "snapshot JSON has package/service inventory hash fields"
+
+# --- Control-catalog sync field (issue: catalog sync check) ---
+if command -v jq &>/dev/null; then
+  cat_val=$(jq -r '.fields.catalog_controls_sha256 // empty' "$LATEST" 2>/dev/null)
+else
+  cat_val=$(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+v=d.get('fields',{}).get('catalog_controls_sha256')
+if v is not None: print(v)
+" "$LATEST" 2>/dev/null)
+fi
+[[ -n "$cat_val" ]] || fail "snapshot JSON missing catalog_controls_sha256 field"
+ok "snapshot JSON has catalog sync field (catalog_controls_sha256)"
+
+# --- Tamper-evident snapshot chain (issue: hash-chained snapshots) ---
+# Uses its own fresh SARGE_SNAPSHOT_DIR: the drift-simulation test above
+# rewrites latest.json in place (jq output moved onto the symlink path),
+# which turns latest.json from a symlink into a plain file and would
+# otherwise confuse the chain's file-identity assumptions here.
+CHAIN_SNAPSHOT_DIR="$TMPDIR_DRIFT/snapshots-chain"
+mkdir -p "$CHAIN_SNAPSHOT_DIR"
+export SARGE_SNAPSHOT_DIR="$CHAIN_SNAPSHOT_DIR"
+CHAIN_LATEST="$CHAIN_SNAPSHOT_DIR/latest.json"
+
+export SARGE_RUN_ROOT="$TMPDIR_DRIFT/run-chain1"
+export SARGE_RUN_ID="test-chain1-$$"
+mkdir -p "$SARGE_RUN_ROOT"
+bash "$REPO_ROOT/drift/snapshot.sh" > /dev/null 2>&1 || fail "first chain snapshot.sh exited non-zero"
+
+# First-ever snapshot in a fresh SARGE_SNAPSHOT_DIR has no predecessor,
+# so previous_hash must be the literal "none".
+if command -v jq &>/dev/null; then
+  prev_hash=$(jq -r '.previous_hash // empty' "$CHAIN_LATEST" 2>/dev/null)
+else
+  prev_hash=$(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+v=d.get('previous_hash')
+if v is not None: print(v)
+" "$CHAIN_LATEST" 2>/dev/null)
+fi
+[[ "$prev_hash" == "none" ]] || fail "first snapshot previous_hash should be 'none', got '$prev_hash'"
+ok "first snapshot previous_hash is 'none'"
+
+# Take a second snapshot and confirm its previous_hash is a real sha256
+# (not 'none') and the chain reports OK.
+export SARGE_RUN_ROOT="$TMPDIR_DRIFT/run-chain2"
+export SARGE_RUN_ID="test-chain2-$$"
+mkdir -p "$SARGE_RUN_ROOT"
+sleep 1
+bash "$REPO_ROOT/drift/snapshot.sh" > /dev/null 2>&1 || fail "second snapshot.sh exited non-zero"
+if command -v jq &>/dev/null; then
+  prev_hash2=$(jq -r '.previous_hash // empty' "$CHAIN_LATEST" 2>/dev/null)
+else
+  prev_hash2=$(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+v=d.get('previous_hash')
+if v is not None: print(v)
+" "$CHAIN_LATEST" 2>/dev/null)
+fi
+[[ -n "$prev_hash2" && "$prev_hash2" != "none" ]] || fail "second snapshot previous_hash should be a real hash, got '$prev_hash2'"
+ok "second snapshot previous_hash records predecessor's hash"
+
+export SARGE_RUN_ROOT="$TMPDIR_DRIFT/run-chain-ok"
+export SARGE_RUN_ID="test-chain-ok-$$"
+mkdir -p "$SARGE_RUN_ROOT"
+CHAIN_OUT=$(bash "$REPO_ROOT/drift/compare.sh" 2>&1)
+echo "$CHAIN_OUT" | grep -q "\[CHAIN\] Snapshot integrity: OK" || fail "expected intact chain to report OK, got: $CHAIN_OUT"
+ok "compare.sh reports chain OK for an untampered chain"
+
+# Restore the original snapshot dir for anything after this point.
+export SARGE_SNAPSHOT_DIR="$TMPDIR_DRIFT/snapshots"
+
 echo ""
 echo "drift-detection: $PASS/$TESTS passed"
 [[ "$PASS" -eq "$TESTS" ]]

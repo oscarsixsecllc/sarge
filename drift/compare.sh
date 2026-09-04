@@ -75,6 +75,58 @@ platform drift_check_fields
 
 echo ""
 
+# Tamper-evident snapshot chain verification. The current snapshot
+# records the hash of the file that WAS latest.json at the moment it was
+# taken (see drift/snapshot.sh). To verify, find that predecessor file
+# on disk — snapshot filenames sort lexicographically by timestamp, so
+# it's the entry immediately before the current target in a sorted
+# listing — and recompute its hash. A mismatch (or a recorded hash that
+# no longer resolves to any file on disk) means either the predecessor
+# was retroactively edited or the chain metadata itself was tampered
+# with. Missing predecessor (first-ever snapshot, "none") is valid.
+CHAIN_VALID="true"
+CURRENT_PREV_HASH=$(python3 - "$LATEST" <<'PY' 2>/dev/null
+import json, sys
+try:
+    with open(sys.argv[1]) as fh:
+        data = json.load(fh)
+    print(data.get("previous_hash", "none"))
+except Exception:
+    print("none")
+PY
+) || true
+CURRENT_PREV_HASH=${CURRENT_PREV_HASH:-none}
+
+CURRENT_TARGET=$(readlink -f "$LATEST" 2>/dev/null || readlink "$LATEST" 2>/dev/null || echo "$LATEST")
+if [[ "$CURRENT_PREV_HASH" == "none" ]]; then
+  echo "[CHAIN] Snapshot integrity: OK (first snapshot in chain)"
+else
+  PREDECESSOR=""
+  while IFS= read -r f; do
+    if [[ "$f" == "$CURRENT_TARGET" ]]; then
+      break
+    fi
+    PREDECESSOR="$f"
+  done < <(find "$SNAPSHOT_DIR" -maxdepth 1 -name 'snapshot-*.json' 2>/dev/null | sort)
+
+  if [[ -z "$PREDECESSOR" ]] || [[ ! -f "$PREDECESSOR" ]]; then
+    # Predecessor no longer exists on disk — can't verify either way.
+    # Don't fail the chain on legitimate pruning/rotation; only flag a
+    # mismatch when we CAN compute a hash and it disagrees.
+    echo "[CHAIN] Snapshot integrity: UNVERIFIABLE (predecessor snapshot not found on disk)"
+  elif command -v sha256sum &>/dev/null; then
+    ACTUAL_PREV_HASH=$(sha256sum "$PREDECESSOR" 2>/dev/null | awk '{print $1}') || true
+    if [[ "$ACTUAL_PREV_HASH" == "$CURRENT_PREV_HASH" ]]; then
+      echo "[CHAIN] Snapshot integrity: OK"
+    else
+      echo "[CHAIN] Snapshot integrity: BROKEN"
+      CHAIN_VALID="false"
+    fi
+  else
+    echo "[CHAIN] Snapshot integrity: UNVERIFIABLE (sha256sum unavailable)"
+  fi
+fi
+
 # Write per-run drift-report.json (issue #34). Self-contained machine-
 # readable view of this compare invocation; the legacy stdout summary
 # above is unchanged so existing log scrapers keep working.
@@ -85,11 +137,13 @@ if command -v jq &>/dev/null; then
     --arg host "$(hostname)" \
     --arg snapshot "$LATEST" \
     --argjson drift_count "$DRIFT" \
+    --argjson chain_valid "$CHAIN_VALID" \
     '{
       timestamp: $ts,
       host: $host,
       baseline_snapshot: $snapshot,
       drift_count: $drift_count,
+      chain_valid: $chain_valid,
       items: (
         split("\n")
         | map(select(length > 0))
@@ -104,6 +158,7 @@ else
     echo "  \"host\": \"$(hostname)\","
     echo "  \"baseline_snapshot\": \"${LATEST}\","
     echo "  \"drift_count\": ${DRIFT},"
+    echo "  \"chain_valid\": ${CHAIN_VALID},"
     echo "  \"items\": ["
     total_lines=$(wc -l < "$DRIFT_ITEMS_FILE" | tr -d ' ')
     idx=0

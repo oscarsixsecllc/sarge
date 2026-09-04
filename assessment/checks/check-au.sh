@@ -86,3 +86,87 @@ else
     warnx "AU-2-journal-not-persisted" "AU-2: Journal persistence unclear — verify /etc/systemd/journald.conf Storage setting"
   fi
 fi
+
+# AU-4: Audit log storage capacity
+log "AU-4: Audit log storage capacity"
+if ! platform_supports log_partition_free_pct; then
+  skipx "AU-4-log-storage" "AU-4: audit log partition free-space check is Linux-specific; not applicable on ${SARGE_OS_DESCRIPTION}"
+else
+  FREE_PCT=$(platform log_partition_free_pct)
+  if [[ -z "$FREE_PCT" ]]; then
+    warnx "AU-4-log-storage" "AU-4: could not determine free space on the audit log partition"
+  elif [[ "$FREE_PCT" -gt 10 ]]; then
+    passx "AU-4-log-storage" "AU-4: audit log partition has ${FREE_PCT}% free — adequate headroom"
+  else
+    failx "AU-4-log-storage" "AU-4: audit log partition has only ${FREE_PCT}% free — expand storage or tighten log rotation"
+  fi
+fi
+
+# AU-5: Response to audit failures
+log "AU-5: Response to audit failures"
+if ! platform_supports auditd_config_value; then
+  skipx "AU-5-audit-failure-response" "AU-5: auditd.conf inspection is a Linux auditd construct; not applicable on ${SARGE_OS_DESCRIPTION}"
+elif [[ ! -f "$(platform auditd_config_path)" ]]; then
+  skipx "AU-5-audit-failure-response" "AU-5: $(platform auditd_config_path) not found — auditd may not be installed"
+else
+  DISK_FULL_ACTION=$(platform auditd_config_value "disk_full_action")
+  SPACE_LEFT_ACTION=$(platform auditd_config_value "admin_space_left_action")
+  if [[ -n "$DISK_FULL_ACTION" && "${DISK_FULL_ACTION^^}" != "IGNORE" \
+        && -n "$SPACE_LEFT_ACTION" && "${SPACE_LEFT_ACTION^^}" != "IGNORE" ]]; then
+    passx "AU-5-audit-failure-response" "AU-5: disk_full_action=$DISK_FULL_ACTION, admin_space_left_action=$SPACE_LEFT_ACTION"
+  else
+    warnx "AU-5-audit-failure-response" "AU-5: disk_full_action=${DISK_FULL_ACTION:-unset}, admin_space_left_action=${SPACE_LEFT_ACTION:-unset} — set both to something other than IGNORE (e.g. SYSLOG, EMAIL, HALT)"
+  fi
+fi
+
+# AU-7: Audit reduction and report generation
+log "AU-7: Audit reduction and report generation"
+if ! platform_supports journalctl_available; then
+  skipx "AU-7-log-tooling" "AU-7: journalctl/ausearch availability check is Linux-specific; not applicable on ${SARGE_OS_DESCRIPTION}"
+else
+  TOOLING_NOTE=""
+  if platform journalctl_available; then
+    TOOLING_NOTE="journalctl"
+  fi
+  if platform_supports ausearch_available && platform ausearch_available; then
+    TOOLING_NOTE="${TOOLING_NOTE:+$TOOLING_NOTE, }ausearch"
+  fi
+  if platform_supports syslog_forwarding_configured && platform syslog_forwarding_configured; then
+    TOOLING_NOTE="${TOOLING_NOTE:+$TOOLING_NOTE, }syslog forwarding"
+  fi
+  if [[ -n "$TOOLING_NOTE" ]]; then
+    passx "AU-7-log-tooling" "AU-7: log query/aggregation tooling available ($TOOLING_NOTE)"
+  else
+    warnx "AU-7-log-tooling" "AU-7: no log query/aggregation tooling detected — install auditd (ausearch) or configure syslog forwarding"
+  fi
+fi
+
+# AU-8: Time stamps
+log "AU-8: Time stamps"
+if ! platform_supports time_sync_active; then
+  skipx "AU-8-time-sync" "AU-8: NTP sync check via timedatectl/chronyc is Linux-specific; verify time sync via ${SARGE_OS_DESCRIPTION} equivalent separately"
+elif platform time_sync_active; then
+  passx "AU-8-time-sync" "AU-8: system clock is synchronized (NTP)"
+else
+  failx "AU-8-time-sync" "AU-8: system clock is not synchronized — enable NTP: sudo timedatectl set-ntp true"
+fi
+
+# AU-11: Audit record retention
+log "AU-11: Audit record retention"
+if ! platform_supports logrotate_audit_config_path; then
+  skipx "AU-11-log-retention" "AU-11: logrotate inspection is a Linux construct; not applicable on ${SARGE_OS_DESCRIPTION}"
+else
+  LOGROTATE_CONF=$(platform logrotate_audit_config_path)
+  if [[ ! -f "$LOGROTATE_CONF" ]]; then
+    warnx "AU-11-log-retention" "AU-11: no logrotate config found for audit logs at $LOGROTATE_CONF — configure log rotation with adequate retention"
+  else
+    ROTATE_COUNT=$(platform logrotate_rotate_count "$LOGROTATE_CONF")
+    if [[ -z "$ROTATE_COUNT" ]]; then
+      warnx "AU-11-log-retention" "AU-11: $LOGROTATE_CONF has no 'rotate' directive — retention period is undefined"
+    elif [[ "$ROTATE_COUNT" -ge 4 ]]; then
+      passx "AU-11-log-retention" "AU-11: audit logs retained for $ROTATE_COUNT rotation cycles ($LOGROTATE_CONF)"
+    else
+      warnx "AU-11-log-retention" "AU-11: audit logs retained for only $ROTATE_COUNT rotation cycles — recommend >= 4 weeks retention"
+    fi
+  fi
+fi
