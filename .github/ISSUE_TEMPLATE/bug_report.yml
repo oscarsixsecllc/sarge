@@ -1,0 +1,88 @@
+name: Bug Report
+description: Report a bug in Sarge (false positive, false negative, script error, etc.)
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill out the details below so we can reproduce and fix it.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of Sarge is affected?
+      options:
+        - Assessment (assess.sh / assess.ps1)
+        - Hardening (scripts/harden-*.sh)
+        - Drift detection (drift/)
+        - Findings catalog (findings-catalog.json)
+        - Backup / Rollback
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: e.g., Ubuntu 24.04 LTS x86_64, macOS 15.1 arm64, Windows 11 23H2
+      placeholder: Ubuntu 24.04 LTS x86_64
+    validations:
+      required: true
+
+  - type: input
+    id: openclaw-version
+    attributes:
+      label: OpenClaw Version
+      description: Output of `openclaw --version`, or "N/A" if running --host-only
+      placeholder: 2026.8.2
+    validations:
+      required: true
+
+  - type: input
+    id: sarge-version
+    attributes:
+      label: Sarge Version
+      description: Git tag or commit hash (run `git describe --tags --always`)
+      placeholder: v0.9.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Exact commands or actions that trigger the bug.
+      placeholder: |
+        1. Run `./assessment/assess.sh`
+        2. Observe check AC-3-openclaw-dir-perm
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happens? Include error output if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Anything else that might help (Docker vs VM, relevant config, screenshots, etc.)
+    validations:
+      required: false

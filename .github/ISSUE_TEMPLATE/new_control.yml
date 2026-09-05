@@ -1,0 +1,107 @@
+name: New Control Request
+description: Request coverage for a new NIST 800-53 Rev 5 control
+title: "[Control] "
+labels: ["enhancement", "new-control"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to request that Sarge add coverage for a new NIST 800-53 Rev 5 control.
+
+  - type: input
+    id: control-id
+    attributes:
+      label: Control ID
+      description: The NIST 800-53 Rev 5 control identifier
+      placeholder: AC-19
+    validations:
+      required: true
+
+  - type: input
+    id: control-name
+    attributes:
+      label: Control Name
+      description: Full name from NIST SP 800-53 Rev 5
+      placeholder: Access Control for Mobile Devices
+    validations:
+      required: true
+
+  - type: dropdown
+    id: family
+    attributes:
+      label: Control Family
+      options:
+        - AC (Access Control)
+        - AU (Audit and Accountability)
+        - CA (Assessment, Authorization, and Monitoring)
+        - CM (Configuration Management)
+        - CP (Contingency Planning)
+        - IA (Identification and Authentication)
+        - MP (Media Protection)
+        - RA (Risk Assessment)
+        - SA (System and Services Acquisition)
+        - SC (System and Communications Protection)
+        - SI (System and Information Integrity)
+        - SR (Supply Chain Risk Management)
+        - AS (Agent Safety overlay)
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-to-check
+    attributes:
+      label: What to Check
+      description: |
+        What system state, config value, or OpenClaw setting should Sarge inspect?
+        Include specific files, commands, or config keys.
+      placeholder: |
+        - Check if /etc/some/config has setting X
+        - Verify OpenClaw config key `some.setting` is set to Y
+        - Run `some-command` and verify output
+    validations:
+      required: true
+
+  - type: textarea
+    id: automation-approach
+    attributes:
+      label: Automation Approach
+      description: |
+        How could this check be automated? What commands or file inspections would produce a pass/fail verdict?
+        If part of the control requires human review, note which parts are automatable and which are not.
+      placeholder: |
+        Automatable: Check file permissions with `stat`, verify config key with `jq`
+        Manual: Policy document review for organizational procedures
+    validations:
+      required: true
+
+  - type: dropdown
+    id: coverage-level
+    attributes:
+      label: Expected Coverage Level
+      description: Can the entire control be automated, or only part of it?
+      options:
+        - Full (entirely automatable)
+        - Partial (some aspects require human review)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Is this a host-level check or an OpenClaw agent-runtime check?
+      options:
+        - Host (OS-level, applies in --host-only mode)
+        - Agent (OpenClaw-specific, skipped in --host-only mode)
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: nist-reference
+    attributes:
+      label: NIST Reference
+      description: Link or citation to the NIST SP 800-53 Rev 5 control definition
+      placeholder: https://csf.tools/reference/nist-sp-800-53/r5/ac/ac-19/
+    validations:
+      required: false
