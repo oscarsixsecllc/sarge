@@ -9,11 +9,16 @@ if ! platform_supports pending_security_updates_count; then
 else
   SECURITY_UPDATES=$(platform pending_security_updates_count)
   if [[ "$SECURITY_UPDATES" -eq 0 ]]; then
-    passx "SI-2-security-updates-low" "SI-2: No pending security updates"
+    # On macOS, distinguish "no updates" from "no cached scan data"
+    if platform_supports softwareupdate_no_scan_data && platform softwareupdate_no_scan_data; then
+      warnx "SI-2-security-updates-low" "SI-2: softwareupdate has no cached scan data. Run 'softwareupdate --list' to populate, then re-assess"
+    else
+      passx "SI-2-security-updates-low" "SI-2: No pending security updates"
+    fi
   elif [[ "$SECURITY_UPDATES" -le 3 ]]; then
-    warnx "SI-2-security-updates-low" "SI-2: $SECURITY_UPDATES security updates pending — apply soon"
+    warnx "SI-2-security-updates-low" "SI-2: $SECURITY_UPDATES security updates pending. Apply soon"
   else
-    failx "SI-2-security-updates-high" "SI-2: $SECURITY_UPDATES security updates pending — apply immediately"
+    failx "SI-2-security-updates-high" "SI-2: $SECURITY_UPDATES security updates pending. Apply immediately"
   fi
 fi
 

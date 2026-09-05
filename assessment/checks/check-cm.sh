@@ -82,11 +82,16 @@ if ! platform_supports pending_package_updates_count; then
 else
   PENDING=$(platform pending_package_updates_count)
   if [[ "$PENDING" -eq 0 ]]; then
-    passx "CM-6-pending-updates-low" "CM-6: No pending package updates"
+    # On macOS, distinguish "no updates" from "no cached scan data"
+    if platform_supports softwareupdate_no_scan_data && platform softwareupdate_no_scan_data; then
+      warnx "CM-6-pending-updates-low" "CM-6: softwareupdate has no cached scan data. Run 'softwareupdate --list' to populate, then re-assess"
+    else
+      passx "CM-6-pending-updates-low" "CM-6: No pending package updates"
+    fi
   elif [[ "$PENDING" -le 5 ]]; then
-    warnx "CM-6-pending-updates-low" "CM-6: $PENDING package updates pending — review and apply"
+    warnx "CM-6-pending-updates-low" "CM-6: $PENDING package updates pending. Review and apply"
   else
-    failx "CM-6-pending-updates-high" "CM-6: $PENDING package updates pending — apply security updates immediately"
+    failx "CM-6-pending-updates-high" "CM-6: $PENDING package updates pending. Apply security updates immediately"
   fi
 fi
 
