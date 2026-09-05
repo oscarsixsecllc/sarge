@@ -239,3 +239,153 @@ except Exception:
 else
   skipx "AC-14-auth-disabled" "AC-14: OpenClaw config not found at ~/.openclaw/openclaw.json (or legacy ~/.openclaw/config.json)"
 fi
+
+# AC-2(3): Disable Inactive Accounts — lastlog idle check
+#
+# Checks for local accounts that have not logged in for 90+ days and are
+# not system accounts (UID >= 1000). Headless service accounts that never
+# log in interactively (e.g. www-data) are excluded by UID threshold.
+log "AC-2(3): Disable Inactive Accounts"
+if command -v lastlog &>/dev/null; then
+  # lastlog outputs: Username  Port  From  Latest
+  # "**Never logged in**" appears for accounts with no login record.
+  # We flag non-system accounts (UID >= 1000) that have NEVER logged in
+  # AND are not locked/expired. Truly idle accounts (logged in 90+ days
+  # ago) are flagged as well.
+  AC23_STALE=""
+  while IFS= read -r line; do
+    local_user=$(echo "$line" | awk '{print $1}')
+    [[ -z "$local_user" || "$local_user" == "Username" ]] && continue
+    local_uid=$(id -u "$local_user" 2>/dev/null) || continue
+    [[ "$local_uid" -lt 1000 ]] && continue
+    # Skip locked accounts (password field starts with ! or *)
+    local_shadow=$(sudo getent shadow "$local_user" 2>/dev/null | cut -d: -f2) || true
+    [[ "$local_shadow" == "!"* || "$local_shadow" == "*" ]] && continue
+    if echo "$line" | grep -q "Never logged in"; then
+      AC23_STALE="${AC23_STALE:+$AC23_STALE, }${local_user}(never)"
+    else
+      # Parse the date from lastlog output and check if > 90 days ago
+      last_date=$(echo "$line" | awk '{for(i=4;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
+      if [[ -n "$last_date" ]]; then
+        last_epoch=$(date -d "$last_date" +%s 2>/dev/null) || continue
+        now_epoch=$(date +%s)
+        days_ago=$(( (now_epoch - last_epoch) / 86400 ))
+        if [[ "$days_ago" -ge 90 ]]; then
+          AC23_STALE="${AC23_STALE:+$AC23_STALE, }${local_user}(${days_ago}d)"
+        fi
+      fi
+    fi
+  done < <(lastlog 2>/dev/null)
+  if [[ -z "$AC23_STALE" ]]; then
+    passx "AC-2-3-inactive-accounts" "AC-2(3): No inactive local accounts (>90 days) found"
+  else
+    warnx "AC-2-3-inactive-accounts" "AC-2(3): Inactive accounts found: $AC23_STALE — review and disable or remove"
+  fi
+else
+  skipx "AC-2-3-inactive-accounts" "AC-2(3): lastlog command not available — cannot check account activity"
+fi
+
+# AC-20: Use of External Systems — MCP servers and plugins pointing to external endpoints
+#
+# Enumerates configured MCP servers and plugin entries in openclaw.json
+# that reference external URLs/hosts. Informational: always PASS with
+# a summary so operators can reconcile against their approved-external-
+# systems list (mirrors the CM-8 / SA-9 approach).
+log "AC-20: Use of External Systems"
+AC20_OC_CONFIG=""
+for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+  if [[ -f "$candidate" ]]; then
+    AC20_OC_CONFIG="$candidate"
+    break
+  fi
+done
+if [[ -n "$AC20_OC_CONFIG" ]]; then
+  AC20_CONFIG_NAME=$(basename "$AC20_OC_CONFIG")
+  AC20_EXTERNAL_COUNT="unknown"
+  if command -v python3 &>/dev/null; then
+    AC20_EXTERNAL_COUNT=$(python3 -c '
+import json, sys, re
+try:
+    with open(sys.argv[1]) as fh:
+        cfg = json.load(fh)
+    count = 0
+    # MCP servers with external URLs or non-local commands
+    servers = (cfg.get("mcp") or {}).get("servers") or {}
+    for name, srv in servers.items():
+        if name.startswith("_"):
+            continue
+        url = (srv.get("url") or srv.get("command") or "")
+        if re.search(r"https?://", str(url)):
+            count += 1
+    # Plugin entries with external URLs
+    plugins = (cfg.get("plugins") or {}).get("entries") or cfg.get("plugins") or {}
+    if isinstance(plugins, dict):
+        for name, plg in plugins.items():
+            url = str(plg) if isinstance(plg, str) else (plg.get("url") or "")
+            if re.search(r"https?://", url):
+                count += 1
+    print(count)
+except Exception:
+    print("unknown")
+' "$AC20_OC_CONFIG" 2>/dev/null)
+  fi
+  passx "AC-20-external-systems" "AC-20: ${AC20_EXTERNAL_COUNT} external MCP server(s)/plugin(s) detected in $AC20_CONFIG_NAME — reconcile against approved external systems list"
+else
+  skipx "AC-20-external-systems" "AC-20: OpenClaw config not found at ~/.openclaw/openclaw.json (or legacy ~/.openclaw/config.json)"
+fi
+
+# AC-22: Publicly Accessible Content — web interface and exposed endpoints
+#
+# Checks whether the OpenClaw web UI is enabled and whether any HTTP
+# endpoints are configured for public access. A running web interface
+# means the host serves content that may be reachable from the network.
+log "AC-22: Publicly Accessible Content"
+AC22_OC_CONFIG=""
+for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+  if [[ -f "$candidate" ]]; then
+    AC22_OC_CONFIG="$candidate"
+    break
+  fi
+done
+if [[ -n "$AC22_OC_CONFIG" ]]; then
+  AC22_CONFIG_NAME=$(basename "$AC22_OC_CONFIG")
+  AC22_WEB_ENABLED=""
+  AC22_HTTP_ENDPOINTS=""
+  if command -v python3 &>/dev/null; then
+    AC22_WEB_ENABLED=$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1]) as fh:
+        cfg = json.load(fh)
+    web = (cfg.get("web") or {}).get("enabled")
+    print(str(web).lower() if web is not None else "unset")
+except Exception:
+    print("unknown")
+' "$AC22_OC_CONFIG" 2>/dev/null)
+    AC22_HTTP_ENDPOINTS=$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1]) as fh:
+        cfg = json.load(fh)
+    endpoints = ((cfg.get("gateway") or {}).get("http") or {}).get("endpoints") or {}
+    enabled = [k for k, v in endpoints.items() if isinstance(v, dict) and v.get("enabled") in [True, "true"]]
+    print(",".join(enabled) if enabled else "none")
+except Exception:
+    print("unknown")
+' "$AC22_OC_CONFIG" 2>/dev/null)
+  fi
+  if [[ "$AC22_WEB_ENABLED" == "true" ]]; then
+    warnx "AC-22-public-content" "AC-22: web.enabled is true in $AC22_CONFIG_NAME — verify public-facing content is authorized and reviewed"
+  elif [[ "$AC22_WEB_ENABLED" == "false" ]]; then
+    passx "AC-22-public-content" "AC-22: web.enabled is false in $AC22_CONFIG_NAME"
+  else
+    passx "AC-22-public-content" "AC-22: web.enabled is ${AC22_WEB_ENABLED:-unset} in $AC22_CONFIG_NAME — no explicit public web content"
+  fi
+  if [[ -n "$AC22_HTTP_ENDPOINTS" && "$AC22_HTTP_ENDPOINTS" != "none" && "$AC22_HTTP_ENDPOINTS" != "unknown" ]]; then
+    warnx "AC-22-http-endpoints" "AC-22: HTTP endpoints enabled in $AC22_CONFIG_NAME: $AC22_HTTP_ENDPOINTS — ensure each is intentionally exposed"
+  else
+    passx "AC-22-http-endpoints" "AC-22: No HTTP endpoints enabled in $AC22_CONFIG_NAME"
+  fi
+else
+  skipx "AC-22-public-content" "AC-22: OpenClaw config not found at ~/.openclaw/openclaw.json (or legacy ~/.openclaw/config.json)"
+fi

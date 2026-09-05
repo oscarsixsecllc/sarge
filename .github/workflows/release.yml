@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Integration tests (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build sarge-hardened image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.hardened
+          tags: sarge-hardened:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run catalog-platform-field
+        run: bash tests/integration/catalog-platform-field.sh
+
+      - name: Run report-validation
+        run: |
+          docker run --rm \
+            sarge-hardened:ci \
+            bash -lc 'cd /home/oscar/sarge && bash tests/integration/report-validation.sh'
+
+      - name: Run drift-detection
+        run: |
+          docker run --rm \
+            sarge-hardened:ci \
+            bash -lc 'cd /home/oscar/sarge && bash tests/integration/drift-detection.sh'
+
+      - name: Run agent-safety-checks
+        run: |
+          docker run --rm \
+            sarge-hardened:ci \
+            bash -lc 'cd /home/oscar/sarge && bash tests/integration/agent-safety-checks.sh'
+
+  release:
+    name: Create GitHub Release
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract tag
+        id: tag
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          # Find the previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          {
+            echo 'body<<CHANGELOG_EOF'
+            echo "## What's Changed"
+            echo ""
+            git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges
+            echo ""
+            echo ""
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-initial}...${{ steps.tag.outputs.version }}"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.version }}
+          name: Sarge ${{ steps.tag.outputs.version }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.version, '-') }}

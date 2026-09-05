@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ── Lightweight tests that need only jq + the repo ──────────────────
+  catalog-tests:
+    name: Catalog platform-field tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run catalog-platform-field
+        run: bash tests/integration/catalog-platform-field.sh
+
+  # ── Docker-based integration tests ──────────────────────────────────
+  integration-tests:
+    name: Integration tests (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build sarge-hardened image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.hardened
+          tags: sarge-hardened:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run report-validation
+        run: |
+          docker run --rm \
+            sarge-hardened:ci \
+            bash -lc 'cd /home/oscar/sarge && bash tests/integration/report-validation.sh'
+
+      - name: Run drift-detection
+        run: |
+          docker run --rm \
+            sarge-hardened:ci \
+            bash -lc 'cd /home/oscar/sarge && bash tests/integration/drift-detection.sh'
+
+      - name: Run agent-safety-checks
+        run: |
+          docker run --rm \
+            sarge-hardened:ci \
+            bash -lc 'cd /home/oscar/sarge && bash tests/integration/agent-safety-checks.sh'
+
+  # ── Build-only check for the QA (unhardened) image ──────────────────
+  qa-image-build:
+    name: Build QA image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build sarge-qa image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.qa
+          tags: sarge-qa:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -162,14 +162,14 @@
     "fix": "Restore baseline/openclaw.json.baseline from the sarge repo, or regenerate from a known-good host."
   },
   "CM-2-baseline-version-pin-missing": {
-    "family": "CM-2 — Baseline Configuration",
+    "family": "CM-2 \u2014 Baseline Configuration",
     "what": "Sarge baseline file is present but lacks the _openclawVersion schema-version pin",
     "expected": "baseline/openclaw.json.baseline includes a top-level _openclawVersion field naming the OpenClaw release the baseline was authored against",
     "why": "OpenClaw's config schema evolves; a baseline written against one release will silently misclassify fields when compared against a substantially different release. NIST 800-53 CM-2 requires baselines to be current and identifiable. The pin lets drift tooling refuse comparison (or warn) when the running OpenClaw is too far from the baseline's schema of record.",
     "fix": "Upgrade Sarge to a version that ships baseline/openclaw.json.baseline v0.6.0 or newer, or add the pin manually: \"_openclawVersion\": \"<running-version>\"."
   },
   "CM-2-baseline-version-drift": {
-    "family": "CM-2 — Baseline Configuration",
+    "family": "CM-2 \u2014 Baseline Configuration",
     "what": "Running OpenClaw version differs from the baseline's _openclawVersion pin by more than one minor release",
     "expected": "Baseline authored against the same major.minor as the running OpenClaw (patch-level drift is fine)",
     "why": "A baseline more than one minor behind the running OpenClaw is missing new config surfaces (new tools, new gateway options, new sandbox knobs). Drift comparisons will report false PASS for controls that reference config keys the baseline never knew existed. NIST 800-53 CM-2 requires the baseline to reflect the currently deployed configuration surface.",
@@ -1111,5 +1111,61 @@
     "expected": "All available security patches applied",
     "why": "Pending security patches represent known vulnerabilities with available fixes. Delaying application increases the window of exposure.",
     "fix": "sudo apt update && sudo apt upgrade -y"
+  },
+  "AC-2-3-inactive-accounts": {
+    "family": "AC-2(3) \u2014 Disable Inactive Accounts",
+    "what": "Local accounts that have not logged in for 90+ days or have never logged in",
+    "expected": "All non-system accounts are actively used or explicitly locked/disabled",
+    "why": "AC-2(3) requires disabling inactive accounts to reduce the attack surface. Dormant accounts are prime targets for credential stuffing and lateral movement.",
+    "fix": "Review each flagged account: lock it with \"usermod -L <user>\" if the owner is temporarily away, or delete with \"userdel <user>\" if no longer needed.",
+    "scope": "host"
+  },
+  "AC-20-external-systems": {
+    "family": "AC-20 \u2014 Use of External Systems",
+    "what": "MCP servers and plugins configured to connect to external URLs/hosts",
+    "expected": "All external system connections are documented and approved per organizational policy",
+    "why": "AC-20 requires establishing terms and conditions for using external information systems. Each external MCP server or plugin is a data-flow path that crosses the trust boundary.",
+    "fix": "Reconcile the reported external MCP servers and plugins against your approved external systems list. Remove or disable any that are not explicitly authorized.",
+    "scope": "agent"
+  },
+  "AC-22-public-content": {
+    "family": "AC-22 \u2014 Publicly Accessible Content",
+    "what": "The OpenClaw web interface is enabled, potentially serving public content",
+    "expected": "Public-facing content is authorized, reviewed, and does not include nonpublic information",
+    "why": "AC-22 requires designating individuals to review information prior to public posting. An enabled web interface may expose agent outputs, configuration details, or internal data.",
+    "fix": "Set web.enabled to false if the web UI should not be publicly accessible. If it must be enabled, ensure content review procedures are in place.",
+    "scope": "agent"
+  },
+  "AC-22-http-endpoints": {
+    "family": "AC-22 \u2014 Publicly Accessible Content",
+    "what": "HTTP API endpoints are enabled on the OpenClaw gateway",
+    "expected": "Only intentionally exposed endpoints are enabled, and access controls are in place",
+    "why": "AC-22 requires reviewing publicly accessible content. Enabled HTTP endpoints (chatCompletions, responses, etc.) may allow external access to agent capabilities.",
+    "fix": "Review each enabled endpoint in gateway.http.endpoints and disable any that are not required for your use case.",
+    "scope": "agent"
+  },
+  "CM-10-allowlist-present": {
+    "family": "CM-10 \u2014 Software Usage Restrictions",
+    "what": "No software allowlist file exists to enforce approved package policies",
+    "expected": "A software-allowlist.txt is maintained listing all approved packages for the host",
+    "why": "CM-10 requires establishing software usage restrictions. Without an allowlist, there is no baseline to detect unauthorized software installations.",
+    "fix": "Create baseline/software-allowlist.txt with one package name per line. Populate it with the output of \"dpkg --get-selections | awk ''/install/{print }'\" after reviewing the current package set.",
+    "scope": "host"
+  },
+  "CM-10-unlisted-packages": {
+    "family": "CM-10 \u2014 Software Usage Restrictions",
+    "what": "Installed packages are not listed on the software allowlist",
+    "expected": "All installed packages appear on the approved software allowlist",
+    "why": "CM-10 requires controlling software usage. Packages not on the allowlist may introduce unapproved functionality, dependencies, or vulnerabilities.",
+    "fix": "Review each unlisted package: add it to baseline/software-allowlist.txt if approved, or remove it with \"apt remove <package>\" if not.",
+    "scope": "host"
+  },
+  "CM-12-data-locations": {
+    "family": "CM-12 \u2014 Information Location",
+    "what": "Data-at-rest locations for the OpenClaw deployment have been enumerated",
+    "expected": "Each data location is backed up, access-controlled, and documented in the system security plan",
+    "why": "CM-12 requires identifying the location of information and the specific system components on which it is processed and stored. Knowing where data lives is prerequisite for backup, incident response, and access control.",
+    "fix": "Compare the reported data locations against your backup schedule and access-control policies. Ensure each directory is covered.",
+    "scope": "agent"
   }
 }
