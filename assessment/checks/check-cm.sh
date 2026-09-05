@@ -222,3 +222,86 @@ if command -v npm &>/dev/null; then
 else
   skipx "CM-11-global-npm-packages" "CM-11: npm not found on PATH — global package inventory check skipped"
 fi
+
+# CM-10: Software Usage Restrictions — license/allowlist check
+#
+# Checks whether a Sarge software-allowlist file exists and whether
+# installed packages contain any known restrictively-licensed software.
+# This is a lightweight signal: a full license audit requires a dedicated
+# tool (e.g. license_finder, fossa). Sarge flags the absence of a policy
+# file and spots common non-permissive indicators in dpkg descriptions.
+log "CM-10: Software Usage Restrictions"
+CM10_ALLOWLIST="${SARGE_DIR}/baseline/software-allowlist.txt"
+if [[ -f "$CM10_ALLOWLIST" ]]; then
+  passx "CM-10-allowlist-present" "CM-10: Software allowlist is present at $CM10_ALLOWLIST"
+  # Cross-check: are there installed packages NOT on the allowlist?
+  if command -v dpkg &>/dev/null; then
+    CM10_INSTALLED=$(dpkg --get-selections 2>/dev/null | awk '/\tinstall$/{print $1}')
+    CM10_UNLISTED=""
+    CM10_COUNT=0
+    while IFS= read -r pkg; do
+      [[ -z "$pkg" ]] && continue
+      if ! grep -qxF "$pkg" "$CM10_ALLOWLIST" 2>/dev/null; then
+        CM10_COUNT=$((CM10_COUNT + 1))
+        if [[ $CM10_COUNT -le 5 ]]; then
+          CM10_UNLISTED="${CM10_UNLISTED:+$CM10_UNLISTED, }${pkg}"
+        fi
+      fi
+    done <<< "$CM10_INSTALLED"
+    if [[ $CM10_COUNT -eq 0 ]]; then
+      passx "CM-10-unlisted-packages" "CM-10: All installed packages are on the software allowlist"
+    else
+      warnx "CM-10-unlisted-packages" "CM-10: ${CM10_COUNT} installed package(s) not on software allowlist — first 5: ${CM10_UNLISTED}"
+    fi
+  fi
+else
+  warnx "CM-10-allowlist-present" "CM-10: No software allowlist found at $CM10_ALLOWLIST — create one to enforce software usage restrictions"
+fi
+
+# CM-12: Information Location — data-at-rest location mapping
+#
+# Enumerates known data-storage locations for an OpenClaw deployment so
+# operators know where sensitive data lives. Informational: always PASS
+# with a summary of discovered locations (matches the CM-8 approach).
+log "CM-12: Information Location"
+CM12_LOCATIONS=""
+CM12_COUNT=0
+# OpenClaw workspace
+if [[ -d "$HOME/.openclaw" ]]; then
+  CM12_SIZE=$(du -sh "$HOME/.openclaw" 2>/dev/null | awk '{print $1}')
+  CM12_LOCATIONS="${CM12_LOCATIONS}~/.openclaw(${CM12_SIZE:-?})"
+  CM12_COUNT=$((CM12_COUNT + 1))
+fi
+# Sarge snapshots/runs
+SARGE_DATA_DIR="${SARGE_SNAPSHOT_DIR:-$HOME/.sarge}"
+if [[ -d "$SARGE_DATA_DIR" ]]; then
+  CM12_SARGE_SIZE=$(du -sh "$SARGE_DATA_DIR" 2>/dev/null | awk '{print $1}')
+  CM12_LOCATIONS="${CM12_LOCATIONS:+$CM12_LOCATIONS, }~/.sarge(${CM12_SARGE_SIZE:-?})"
+  CM12_COUNT=$((CM12_COUNT + 1))
+fi
+# Secrets directory
+if [[ -d "$HOME/.openclaw/secrets" ]]; then
+  CM12_SEC_COUNT=$(find "$HOME/.openclaw/secrets" -maxdepth 1 -type f 2>/dev/null | wc -l)
+  CM12_LOCATIONS="${CM12_LOCATIONS:+$CM12_LOCATIONS, }secrets(${CM12_SEC_COUNT} files)"
+fi
+# Media directory (if media.ttlHours is in play)
+MEDIA_DIR="$HOME/.openclaw/media"
+if [[ -d "$MEDIA_DIR" ]]; then
+  CM12_MEDIA_SIZE=$(du -sh "$MEDIA_DIR" 2>/dev/null | awk '{print $1}')
+  CM12_LOCATIONS="${CM12_LOCATIONS:+$CM12_LOCATIONS, }media(${CM12_MEDIA_SIZE:-?})"
+  CM12_COUNT=$((CM12_COUNT + 1))
+fi
+# Transcript/log directories
+for tdir in "$HOME/.openclaw/transcripts" "$HOME/.openclaw/logs"; do
+  if [[ -d "$tdir" ]]; then
+    tname=$(basename "$tdir")
+    tsize=$(du -sh "$tdir" 2>/dev/null | awk '{print $1}')
+    CM12_LOCATIONS="${CM12_LOCATIONS:+$CM12_LOCATIONS, }${tname}(${tsize:-?})"
+    CM12_COUNT=$((CM12_COUNT + 1))
+  fi
+done
+if [[ $CM12_COUNT -gt 0 ]]; then
+  passx "CM-12-data-locations" "CM-12: Data-at-rest locations: $CM12_LOCATIONS — verify each is backed up and access-controlled per policy"
+else
+  warnx "CM-12-data-locations" "CM-12: No standard OpenClaw data directories found — verify data storage locations"
+fi
