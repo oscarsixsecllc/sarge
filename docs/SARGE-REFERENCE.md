@@ -466,6 +466,22 @@ pwsh scripts/rollback-windows.ps1 -BackupDir "$env:USERPROFILE\.sarge\runs\<id>\
 | `SI-3-fail2ban-not-running` | SI-3 | fail2ban running with jails |
 | `SI-7-checksum-mismatch` | SI-7 | Sarge script checksums verified |
 
+### Families not covered (organizational controls)
+
+Sarge automates checks across 12 technical NIST 800-53 Rev 5 families plus the AS agent-safety overlay, but it does not — and cannot — automate 7 of the 19 Rev 5 families: **AT, IR, MA, PE, PL, PM, PS**. These are organizational, administrative, or physical-security controls. They live in policy documents, training programs, HR processes, and facility management — nowhere a host-level scanner can look. They are not lower-priority than the families Sarge does check; they're simply verified a different way (documentation review and process audit, not automated scanning), and a complete 800-53 implementation requires them alongside Sarge's technical findings.
+
+| Family | Covers | Why Sarge can't check it | What to do instead |
+|--------|--------|--------------------------|---------------------|
+| **AT** — Awareness and Training | Security awareness training for all users; role-based training for privileged/security-relevant roles | Training completion is a human/HR record, not a system state | Stand up a training program (KnowBe4, Curricula, or a documented internal module) with tracked completion; refresh annually |
+| **IR** — Incident Response | IR planning, detection, containment, eradication, recovery, reporting | An IR plan is a document plus a rehearsed process — not observable from a config or log scan | Write an IR plan (NIST SP 800-61 as reference), assign roles, run at least one tabletop exercise per year |
+| **MA** — Maintenance | Controlled maintenance scheduling, tooling controls, remote maintenance session supervision | Process discipline around who patches what and under what authorization isn't a queryable config value | Document a maintenance policy (authorization, change records, remote session logging); Sarge's CM/SI checks verify the *outcome*, not the process |
+| **PE** — Physical and Environmental Protection | Physical facility/equipment access control, environmental controls (fire, power, HVAC), visitor logs | Sarge runs on the host and has no visibility into badge readers, server rooms, or fire suppression | Physical security audit for self-hosted infra; for cloud-hosted OpenClaw, PE is largely inherited from the provider's SOC 2 / ISO 27001 attestations |
+| **PL** — Planning | System Security Plan (SSP), rules of behavior, security architecture documentation | The SSP is the narrative artifact that *describes* the system, populated in part by Sarge's own findings — not something a scanner generates | Maintain an SSP describing environment/boundaries/control implementation; use Sarge run reports as input for the technical-control sections; review annually |
+| **PM** — Program Management | Organization-wide security governance — designated security role, risk management strategy, program resourcing | Applies above any single host/deployment; asks whether the org *has* a security program, not what one machine's config says | Designate a person responsible for the security program (can be lightweight for a small org) and document a risk management strategy |
+| **PS** — Personnel Security | Position risk designations, pre-access screening, termination/transfer procedures | Hiring and offboarding happen before/after a person ever touches the system; a post-hoc host scan can't confirm screening happened or access was revoked same-day | Build screening into hiring and a termination/transfer checklist into offboarding (disable accounts, rotate shared secrets, retrieve hardware); Sarge's AC checks (stale/UID-0 accounts) can catch symptoms of a missed step after the fact, but don't substitute for the process |
+
+See the [README's "Families not covered" section](../README.md#families-not-covered) for the same content in the user-facing docs.
+
 ### Windows-Specific Checks (WIN- prefix)
 
 The Windows assessment covers all 6 families with 30+ checks. Key additions beyond the Linux/macOS set:
