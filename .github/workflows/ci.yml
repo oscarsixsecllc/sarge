@@ -34,7 +34,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build sarge-hardened image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.hardened
@@ -73,7 +73,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build sarge-qa image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.qa
