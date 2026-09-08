@@ -204,17 +204,46 @@ Sarge's baseline (`baseline/controls.json`) documents 63 individual NIST 800-53 
 
 ### Families not covered
 
-Sarge does not attempt to automate 7 of the 19 NIST 800-53 Rev 5 families, because they're organizational, administrative, or physical-security controls that a host/config scanner cannot meaningfully verify:
+Sarge does not attempt to automate 7 of the 19 NIST 800-53 Rev 5 families. These are organizational, administrative, or physical-security controls — they live in policy documents, HR processes, training programs, and facility management, not in a host's filesystem or config. A scanner that inspects OS state and OpenClaw config has no way to observe whether a background check happened or a fire suppression system is inspected annually. That doesn't make them optional: a complete 800-53 implementation needs all 19 families, and these 7 are exactly as mandatory as the ones Sarge checks. They just need a different kind of verification — documentation review and organizational process audit — rather than automated scanning.
 
-- **AT — Awareness and Training** — training program content and completion tracking, not a system state.
-- **IR — Incident Response** — response plans, playbooks, and tabletop exercises are process artifacts, not scannable config.
-- **MA — Maintenance** — maintenance scheduling, tooling, and personnel controls.
-- **PE — Physical and Environmental Protection** — facility access, environmental controls — not visible to a host-level scan.
-- **PL — Planning** — system security plans and policy documents.
-- **PM — Program Management** — organization-wide security program governance.
-- **PS — Personnel Security** — background checks, termination procedures, personnel screening.
+For each family below: what it covers, why a host scanner can't verify it, and what to do about it instead.
 
-These require documentation review and organizational process audit, not automated scanning — they're out of scope for a tool that inspects OpenClaw config and OS state.
+**AT — Awareness and Training**
+- *Covers:* Security awareness training for all users, and role-based training for users with significant security responsibilities (admins, developers, incident responders).
+- *Why Sarge can't check it:* Training is a recurring human activity with a completion record, not a system setting. There's nothing on disk that proves an employee sat through a phishing-awareness module.
+- *What to do instead:* Stand up a training program (a platform like KnowBe4, Curricula, or even a documented internal onboarding module satisfies AT-2/AT-3) and keep completion records. Review and refresh content annually or after significant incidents.
+
+**IR — Incident Response**
+- *Covers:* Incident response planning, detection, analysis, containment, eradication, recovery, and post-incident reporting.
+- *Why Sarge can't check it:* An incident response plan is a document plus a rehearsed process (tabletop exercises, defined roles, escalation paths). A host scan can confirm auditd is running (that's AU, which Sarge does check) but not that anyone knows what to do with the log data during a live incident.
+- *What to do instead:* Write an incident response plan (NIST SP 800-61 is the standard companion reference), assign roles, and run at least one tabletop exercise per year. Keep the plan somewhere the team can reach it even if the primary system is down.
+
+**MA — Maintenance**
+- *Covers:* Controlled, scheduled system maintenance; controls on maintenance tools and remote maintenance sessions; supervision of maintenance personnel.
+- *Why Sarge can't check it:* This is about process discipline around who performs maintenance, when, and under what authorization — not a config value. A scanner sees the result of an update, not whether it went through a controlled maintenance window.
+- *What to do instead:* Document a maintenance policy (who can patch/reboot production systems, approval and change-record requirements, remote maintenance session logging) and follow it. Sarge's CM/SI checks (unattended-upgrades, pending patches) verify the *outcome* of good maintenance practice, which is complementary to this.
+
+**PE — Physical and Environmental Protection**
+- *Covers:* Physical access control to facilities and equipment, environmental controls (fire suppression, temperature/humidity, power), and visitor/monitoring logs.
+- *Why Sarge can't check it:* Sarge runs on the host itself and has no visibility into the physical world — badge readers, server room doors, and fire suppression systems aren't queryable over SSH.
+- *What to do instead:* For self-hosted infrastructure, conduct a physical security audit (badge/lock access lists, visitor logs, environmental monitoring) and document it. If your OpenClaw deployment runs on cloud infrastructure (AWS/GCP/Azure), PE is largely inherited from the cloud provider's compliance attestations (SOC 2, ISO 27001) — reference those in your SSP instead of re-auditing a data center you don't operate.
+
+**PL — Planning**
+- *Covers:* The System Security Plan (SSP) itself, rules of behavior, and the organization's overall security architecture documentation.
+- *Why Sarge can't check it:* The SSP is the document that *describes* the system's security posture and ties all the other controls together — it's the artifact you'd populate with Sarge's own findings, not something Sarge can generate or verify on its own.
+- *What to do instead:* Maintain a System Security Plan describing your environment, boundaries, and control implementation (Sarge's per-run reports are a good input here — they document the technical controls; you still need to write the narrative and rules-of-behavior sections). Review and update it at least annually or after major architecture changes.
+
+**PM — Program Management**
+- *Covers:* Organization-wide security program governance — a designated security officer/role, risk management strategy, and program-level resourcing and oversight, distinct from any single system.
+- *Why Sarge can't check it:* PM controls apply above the level of any individual host or deployment; they're about whether the organization *has* a security program at all, which isn't something one machine's config can answer.
+- *What to do instead:* Designate a person (even part-time, in a small org) responsible for the security program, document a risk management strategy, and review it periodically. For a small business running a single OpenClaw deployment, this can be lightweight — the point is that responsibility and oversight are explicit rather than assumed.
+
+**PS — Personnel Security**
+- *Covers:* Position risk designations, screening (background checks) prior to granting access, and procedures for personnel termination and transfer (revoking access, retrieving equipment).
+- *Why Sarge can't check it:* These are HR and hiring processes that happen before and after a person ever touches the system. A scan of the running host after the fact can't tell you whether the person who has an account today was screened before onboarding, or whether a departed employee's access was revoked same-day.
+- *What to do instead:* Build screening into hiring (background checks proportional to access level) and build a termination/transfer checklist into offboarding (disable accounts, rotate shared secrets, retrieve hardware) — and execute it every time, not just when someone remembers. Sarge's AC checks (stale accounts, UID 0 accounts) can catch *symptoms* of a missed offboarding step after the fact, but PS is about preventing the gap in the first place.
+
+These require documentation review and organizational process audit, not automated scanning — they're out of scope for a tool that inspects OpenClaw config and OS state, but they are not optional. See [`docs/SARGE-REFERENCE.md`](docs/SARGE-REFERENCE.md#families-not-covered-organizational-controls) for the same breakdown alongside the rest of Sarge's technical documentation.
 
 ---
 
