@@ -2,7 +2,7 @@
 
 > **Focus Forward. We've Got Your Six.** — Oscar Six Security LLC
 
-[![Version](https://img.shields.io/badge/version-v0.10.0-green)](https://github.com/oscarsixsecllc/sarge/releases)
+[![Version](https://img.shields.io/badge/version-v0.11.0-green)](https://github.com/oscarsixsecllc/sarge/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20macOS%20%7C%20Windows-orange)](docs/quickstart.md)
 
@@ -14,7 +14,7 @@ Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool,
 
 ## What Sarge Does
 
-- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **63 controls across 12 NIST families + AS agent-safety overlay** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x–2026.8.x (tested against 2026.8.2). See [NIST 800-53 Rev 5 Control Coverage](#nist-800-53-rev-5-control-coverage) below for the full per-control breakdown.
+- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **68 controls across 12 NIST families + AS agent-safety overlay** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x–2026.8.x (tested against 2026.8.2). See [NIST 800-53 Rev 5 Control Coverage](#nist-800-53-rev-5-control-coverage) below for the full per-control breakdown.
 - 🔒 **Hardening Scripts** — Idempotent, auditable bash scripts for UFW, auditd, PAM (faillock + pwquality), fail2ban, systemd service hardening, and file permissions.
 - 📸 **Drift Detection** — Compares current system state against a captured baseline. Any drift generates a notification via your OpenClaw-configured channel.
 - 🗺️ **Control Mapping** — Every OpenClaw setting and OS-level recommendation mapped to its 800-53 control ID, in both JSON and Markdown.
@@ -82,13 +82,13 @@ In host-only mode, agent-scoped findings are excluded entirely (not even SKIP �
 
 ## NIST 800-53 Rev 5 Control Coverage
 
-Sarge's baseline (`baseline/controls.json`) documents 63 individual NIST 800-53 Rev 5 controls across 12 families. Each control lists the exact OpenClaw settings and OS-level checks Sarge inspects, plus remediation guidance.
+Sarge's baseline (`baseline/controls.json`) documents 68 individual NIST 800-53 Rev 5 controls across 12 families. Each control lists the exact OpenClaw settings and OS-level checks Sarge inspects, plus remediation guidance.
 
 ### Summary by family
 
-- **AC — Access Control** — 12 controls — Partial (11 full, 1 partial)
+- **AC — Access Control** — 15 controls — Partial (14 full, 1 partial)
 - **AU — Audit and Accountability** — 10 controls — Full
-- **CM — Configuration Management** — 7 controls — Partial (6 full, 1 partial)
+- **CM — Configuration Management** — 9 controls — Partial (7 full, 2 partial)
 - **IA — Identification and Authentication** — 7 controls — Full
 - **SC — System and Communications Protection** — 11 controls — Full
 - **SI — System and Information Integrity** — 7 controls — Partial (4 full, 3 partial)
@@ -103,9 +103,10 @@ Sarge's baseline (`baseline/controls.json`) documents 63 individual NIST 800-53 
 
 ---
 
-### AC — Access Control (12 controls)
+### AC — Access Control (15 controls)
 
 - **AC-2 — Account Management** (full) — Checks `agents.allowlist`, `channels.*.allowedUsers`, `gateway.nodes.pairing.autoApproveCidrs`; OS: `getent passwd`, `lastlog`, `who`. Remediation: remove unused accounts, restrict the OpenClaw allowlist to named users only.
+- **AC-2(3) — Disable Inactive Accounts** (full) — OS: `lastlog`, `getent shadow`. Remediation: review accounts inactive for 90+ days and disable or remove them; use `usermod -L` to lock or `userdel` to remove.
 - **AC-3 — Access Enforcement** (full) — Checks `tools.fs.workspaceOnly`, `agents.defaults.sandbox.mode`, `browser.attachOnly`, `browser.noSandbox`, `browser.evaluateEnabled`, `hooks.allowRequestSessionKey`, `hooks.allowedAgentIds`, `commands.ownerAllowFrom`, `gateway.controlUi.allowedOrigins`, `gateway.controlUi.allowInsecureAuth`, `approvals.exec.enabled`, `acp.allowedAgents`, `tools.codeMode.enabled`, `tools.sandbox.tools.alsoAllow`, `gateway.nodes.allowCommands`, `gateway.nodes.denyCommands`, `nodeHost.browserProxy.enabled`, `nodeHost.browserProxy.allowProfiles`, `crestodian.rescue.ownerDmOnly`, `talk.realtime.consultRouting`; OS: file permissions on `~/.openclaw/`, sudoers review. Remediation: set `workspaceOnly=true`, set sandbox mode to `all`, restrict sudoers, disable browser `noSandbox`, set `hooks.allowRequestSessionKey=false`.
 - **AC-4 — Information Flow Enforcement** (full) — Checks `session.dmScope`, `messages.groupChat.visibleReplies`, `tools.web.search.enabled`, `tools.web.fetch.enabled`, `diagnostics.otel.captureContent.enabled`, `broadcast.strategy`, `acp.stream.maxOutputChars`, `surfaces.*.silentReply`. Remediation: set `session.dmScope` to `per-channel-peer`, review `tools.web` settings, disable `diagnostics.otel.captureContent` unless the collector is within your data boundary.
 - **AC-5 — Separation of Duties** (full) — OS: `whoami`, `groups <user>`. Remediation: run OpenClaw under a dedicated service account that is not a member of the sudo/admin group.
@@ -117,6 +118,8 @@ Sarge's baseline (`baseline/controls.json`) documents 63 individual NIST 800-53 
 - **AC-12 — Session Termination** (full) — Checks `mcp.sessionIdleTtlMs`, `agents.defaults.subagents.archiveAfterMinutes`, `cron.sessionRetention`, `acp.runtime.ttlMinutes`, `crestodian.rescue.pendingTtlMinutes`. Remediation: set `mcp.sessionIdleTtlMs` to 600000 (10 min), set `subagents.archiveAfterMinutes` to 60, review `cron.sessionRetention`.
 - **AC-14 — Permitted Actions Without Identification or Authentication** (full) — Checks `auth.enabled`. Remediation: set `auth.enabled` to `true` so gateway actions require identification/authentication.
 - **AC-17 — Remote Access** (full) — Checks `gateway.bind`, `gateway.auth.mode`, `gateway.auth.rateLimit`, `gateway.controlUi.allowedOrigins`, `gateway.terminal.enabled`, `hooks.enabled`; OS: `ufw status`, `ss -tlnp`. Remediation: bind the gateway to loopback, enable `gateway.auth.mode=token`, set an auth rate limit, disable external hooks and the gateway terminal.
+- **AC-20 — Use of External Systems** (full) — Checks `mcp.servers`, `plugins.entries`. Remediation: review all external MCP servers and plugins against an approved external-systems list; remove any unauthorized external connections.
+- **AC-22 — Publicly Accessible Content** (full) — Checks `web.enabled`, `gateway.http.endpoints`. Remediation: disable `web.enabled` if the web UI should not be public; review each HTTP endpoint and disable any that are not intentionally exposed.
 
 ### AU — Audit and Accountability (10 controls)
 
@@ -131,7 +134,7 @@ Sarge's baseline (`baseline/controls.json`) documents 63 individual NIST 800-53 
 - **AU-11 — Audit Record Retention** (full) — OS: `grep rotate /etc/logrotate.d/auditd`. Remediation: configure logrotate for audit logs with a `rotate` count of at least 4 (weekly rotation) for minimum retention.
 - **AU-12 — Audit Record Generation** (full) — Checks `logging.auditActions`, `transcripts.enabled`, `transcripts.autoStart`; OS: `auditctl -l | grep openclaw`. Remediation: add auditd watch rules for `~/.openclaw/secrets/` and OpenClaw config files; review `transcripts.autoStart` sources.
 
-### CM — Configuration Management (7 controls)
+### CM — Configuration Management (9 controls)
 
 - **CM-2 — Baseline Configuration** (full) — Checks `*` (all settings against baseline); OS: `dpkg --get-selections`, `systemctl list-units --state=enabled`. Remediation: maintain `openclaw.json.baseline` as the documented configuration baseline.
 - **CM-3 — Configuration Change Control** (full) — Checks `gateway.reload.mode`, `update.auto.enabled`, `commands.restart`. Remediation: set `gateway.reload.mode` to `hybrid`, disable `update.auto` unless `stableDelayHours >= 6`, review restart command availability.
@@ -139,7 +142,9 @@ Sarge's baseline (`baseline/controls.json`) documents 63 individual NIST 800-53 
 - **CM-6 — Configuration Settings** (full) — Checks `tools.fs.workspaceOnly`, `agents.defaults.sandbox.mode`, `gateway.bind`, `models.mode`, `session.dmScope`, `messages.groupChat.visibleReplies`, `cron.maxConcurrentRuns`; OS: `ufw status verbose`, `sshd -T | grep -i permit`. Remediation: apply all settings in `openclaw.json.baseline` and all Sarge hardening scripts; verify `models.mode`, `session.dmScope`, and cron settings match baseline.
 - **CM-7 — Least Functionality** (full) — Checks `plugins.entries`, `plugins.slots`, `tools.web`, `tools.codeMode.enabled`, `skills.entries`, `skills.workshop.approvalPolicy`, `skills.install.allowUploadedArchives`, `skills.load.allowSymlinkTargets`, `browser.enabled`, `browser.evaluateEnabled`, `browser.ssrfPolicy`, `mcp.servers`, `discovery.mdns.mode`, `gateway.http.endpoints.chatCompletions.enabled`, `gateway.http.endpoints.responses.enabled`, `gateway.tools.deny`, `gateway.tools.allow`, `commitments.enabled`, `security.installPolicy.enabled`, `marketplaces.feeds`, `marketplaces.sources`, `audio.transcription.command`; OS: `systemctl list-units --state=enabled`, `apt list --installed`. Remediation: disable unused plugins/skills/tools, set `skills.workshop.approvalPolicy=review`, disable the browser unless needed, set `discovery.mdns.mode=minimal`, remove unnecessary OS packages.
 - **CM-8 — System Component Inventory** (full) — Checks `mcp.servers`, `plugins.entries`; OS: `node --version`. Remediation: maintain an approved component list and reconcile it against the reported Node.js version, MCP servers, and plugins.
+- **CM-10 — Software Usage Restrictions** (partial) — OS: `dpkg --get-selections`. Remediation: create a `software-allowlist.txt` in `baseline/` listing approved packages; review and remove any unlisted packages.
 - **CM-11 — User-Installed Software** (partial) — OS: `npm list -g --depth=0`. Remediation: review globally-installed npm packages and remove any not approved for the host.
+- **CM-12 — Information Location** (full) — OS: `du -sh ~/.openclaw`, `du -sh ~/.sarge`. Remediation: verify each reported data-at-rest location is backed up and access-controlled per organizational policy.
 
 ### IA — Identification and Authentication (7 controls)
 
