@@ -327,3 +327,207 @@ if [[ "${SARGE_HOST_ONLY:-0}" != "1" ]]; then
 else
   skipx "SC-39-cgroup-isolation" "SC-39: host-only mode — process isolation checks skipped"
 fi
+
+# SC-5: Denial-of-Service Protection — rate limits on gateway and agent concurrency
+log "SC-5: Denial-of-service protection"
+if [[ "${SARGE_HOST_ONLY:-0}" != "1" ]]; then
+  SC5_OC_CONFIG=""
+  for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+    if [[ -f "$candidate" ]]; then
+      SC5_OC_CONFIG="$candidate"
+      break
+    fi
+  done
+  if [[ -n "$SC5_OC_CONFIG" ]]; then
+    SC5_CONFIG_NAME=$(basename "$SC5_OC_CONFIG")
+    # Check gateway auth rate limiting
+    SC5_RATE_LIMIT=$(python3 -c '
+import json, sys
+try:
+    cfg = json.load(open(sys.argv[1]))
+    rl = cfg.get("gateway", {}).get("auth", {}).get("rateLimit", {})
+    ma = rl.get("maxAttempts")
+    if ma is not None:
+        print(f"configured:{ma}")
+    else:
+        print("unset")
+except Exception:
+    print("error")
+' "$SC5_OC_CONFIG" 2>/dev/null)
+    case "$SC5_RATE_LIMIT" in
+      configured:*)
+        SC5_RL_VAL="${SC5_RATE_LIMIT#configured:}"
+        if [[ "$SC5_RL_VAL" -le 20 ]] 2>/dev/null; then
+          passx "SC-5-gateway-rate-limit" "SC-5: Gateway auth rate limit set to $SC5_RL_VAL maxAttempts in $SC5_CONFIG_NAME"
+        else
+          warnx "SC-5-gateway-rate-limit" "SC-5: Gateway auth rate limit is $SC5_RL_VAL maxAttempts, consider lowering to 10-20 to mitigate brute-force DoS"
+        fi
+        ;;
+      unset)
+        warnx "SC-5-gateway-rate-limit" "SC-5: gateway.auth.rateLimit.maxAttempts not set in $SC5_CONFIG_NAME, no auth rate limiting is enforced"
+        ;;
+      *)
+        skipx "SC-5-gateway-rate-limit" "SC-5: Could not parse rate limit configuration from $SC5_CONFIG_NAME"
+        ;;
+    esac
+
+    # Check agent concurrency limits
+    SC5_CONCURRENCY=$(python3 -c '
+import json, sys
+try:
+    cfg = json.load(open(sys.argv[1]))
+    ad = cfg.get("agents", {}).get("defaults", {})
+    mc = ad.get("maxConcurrent")
+    smc = ad.get("subagents", {}).get("maxConcurrent")
+    cmc = cfg.get("cron", {}).get("maxConcurrentRuns")
+    parts = []
+    if mc is not None: parts.append(f"agents={mc}")
+    if smc is not None: parts.append(f"subagents={smc}")
+    if cmc is not None: parts.append(f"cron={cmc}")
+    if parts:
+        print("configured:" + ",".join(parts))
+    else:
+        print("unset")
+except Exception:
+    print("error")
+' "$SC5_OC_CONFIG" 2>/dev/null)
+    case "$SC5_CONCURRENCY" in
+      configured:*)
+        SC5_CONC_DETAIL="${SC5_CONCURRENCY#configured:}"
+        passx "SC-5-concurrency-limits" "SC-5: Concurrency limits configured ($SC5_CONC_DETAIL) in $SC5_CONFIG_NAME"
+        ;;
+      unset)
+        warnx "SC-5-concurrency-limits" "SC-5: No agent/subagent/cron concurrency limits found in $SC5_CONFIG_NAME, unbounded concurrency increases DoS risk"
+        ;;
+      *)
+        skipx "SC-5-concurrency-limits" "SC-5: Could not parse concurrency settings from $SC5_CONFIG_NAME"
+        ;;
+    esac
+  else
+    skipx "SC-5-gateway-rate-limit" "SC-5: OpenClaw config not found, cannot check DoS protection settings"
+  fi
+
+  # SC-5: Check if gateway port has connection-level rate limiting via UFW
+  GW_PORT="${OPENCLAW_GATEWAY_PORT:-18790}"
+  if platform firewall_command_available && platform firewall_active; then
+    SC5_UFW_LIMIT=$(ufw status 2>/dev/null | grep -E "$GW_PORT.*LIMIT" || true)
+    if [[ -n "$SC5_UFW_LIMIT" ]]; then
+      passx "SC-5-ufw-rate-limit" "SC-5: UFW rate limiting active on gateway port $GW_PORT"
+    else
+      warnx "SC-5-ufw-rate-limit" "SC-5: No UFW rate limit rule on gateway port $GW_PORT, consider: sudo ufw limit $GW_PORT/tcp"
+    fi
+  else
+    skipx "SC-5-ufw-rate-limit" "SC-5: UFW not active, cannot check network-level rate limiting"
+  fi
+else
+  skipx "SC-5-gateway-rate-limit" "SC-5: host-only mode, DoS protection checks skipped"
+fi
+
+# SC-7: Boundary Protection — firewall posture and unexpected open ports
+log "SC-7: Boundary protection"
+if platform firewall_command_available; then
+  if platform firewall_active; then
+    passx "SC-7-firewall-active" "SC-7: Host firewall (UFW) is active"
+
+    # Check default incoming policy
+    SC7_DEFAULT_IN=$(ufw status verbose 2>/dev/null | grep "Default:" | grep -oE "deny \(incoming\)|reject \(incoming\)" || true)
+    if [[ -n "$SC7_DEFAULT_IN" ]]; then
+      passx "SC-7-default-deny" "SC-7: Default incoming policy is deny/reject"
+    else
+      failx "SC-7-default-deny" "SC-7: Default incoming policy is not deny/reject, run: sudo ufw default deny incoming"
+    fi
+
+    # Check for unexpected externally-listening ports
+    SC7_EXPECTED_PORTS="${SARGE_EXPECTED_PORTS:-22,${OPENCLAW_GATEWAY_PORT:-18790}}"
+    SC7_UNEXPECTED=""
+    while IFS= read -r line; do
+      SC7_PORT=$(echo "$line" | grep -oE ':[0-9]+' | head -1 | tr -d ':')
+      if [[ -n "$SC7_PORT" ]]; then
+        SC7_FOUND=0
+        IFS=',' read -ra SC7_EP_ARR <<< "$SC7_EXPECTED_PORTS"
+        for ep in "${SC7_EP_ARR[@]}"; do
+          if [[ "$SC7_PORT" == "$ep" ]]; then
+            SC7_FOUND=1
+            break
+          fi
+        done
+        if [[ "$SC7_FOUND" -eq 0 ]]; then
+          SC7_UNEXPECTED="${SC7_UNEXPECTED}${SC7_UNEXPECTED:+, }$SC7_PORT"
+        fi
+      fi
+    done < <(ss -tlnp 2>/dev/null | grep -v "127.0.0" | grep -v "::1" | tail -n +2)
+    if [[ -z "$SC7_UNEXPECTED" ]]; then
+      passx "SC-7-unexpected-ports" "SC-7: No unexpected externally-listening ports (expected: $SC7_EXPECTED_PORTS)"
+    else
+      warnx "SC-7-unexpected-ports" "SC-7: Unexpected externally-listening ports detected: $SC7_UNEXPECTED (expected: $SC7_EXPECTED_PORTS)"
+    fi
+  else
+    failx "SC-7-firewall-active" "SC-7: Host firewall (UFW) is installed but not active, run: sudo ufw enable"
+  fi
+else
+  warnx "SC-7-firewall-active" "SC-7: UFW not installed, no host firewall detected"
+fi
+
+# SC-7: OpenClaw boundary settings (SSRF, mDNS, hooks)
+if [[ "${SARGE_HOST_ONLY:-0}" != "1" ]]; then
+  SC7_OC_CONFIG=""
+  for candidate in "$HOME/.openclaw/openclaw.json" "$HOME/.openclaw/config.json"; do
+    if [[ -f "$candidate" ]]; then
+      SC7_OC_CONFIG="$candidate"
+      break
+    fi
+  done
+  if [[ -n "$SC7_OC_CONFIG" ]]; then
+    SC7_CONFIG_NAME=$(basename "$SC7_OC_CONFIG")
+    SC7_BOUNDARY=$(python3 -c '
+import json, sys
+try:
+    cfg = json.load(open(sys.argv[1]))
+    ssrf = cfg.get("browser", {}).get("ssrfPolicy", {}).get("dangerouslyAllowPrivateNetwork")
+    mdns = cfg.get("discovery", {}).get("mdns", {}).get("mode")
+    hooks = cfg.get("hooks", {}).get("enabled")
+    web = cfg.get("web", {}).get("enabled")
+    results = []
+    if ssrf is True:
+        results.append("FAIL:ssrf_private_net=true")
+    elif ssrf is False:
+        results.append("PASS:ssrf_private_net=false")
+    if mdns is not None:
+        if mdns in ("off", "minimal", "disabled"):
+            results.append(f"PASS:mdns={mdns}")
+        else:
+            results.append(f"WARN:mdns={mdns}")
+    if hooks is True:
+        results.append("WARN:hooks=enabled")
+    elif hooks is False:
+        results.append("PASS:hooks=disabled")
+    if web is True:
+        results.append("WARN:web=enabled")
+    print("|".join(results) if results else "none")
+except Exception:
+    print("error")
+' "$SC7_OC_CONFIG" 2>/dev/null)
+    if [[ "$SC7_BOUNDARY" == "error" || "$SC7_BOUNDARY" == "none" ]]; then
+      skipx "SC-7-ssrf-policy" "SC-7: Could not parse boundary settings from $SC7_CONFIG_NAME"
+    else
+      IFS='|' read -ra SC7_ITEMS <<< "$SC7_BOUNDARY"
+      for item in "${SC7_ITEMS[@]}"; do
+        SC7_LEVEL="${item%%:*}"
+        SC7_MSG="${item#*:}"
+        case "$SC7_LEVEL" in
+          FAIL)
+            failx "SC-7-ssrf-policy" "SC-7: Dangerous boundary setting: $SC7_MSG in $SC7_CONFIG_NAME"
+            ;;
+          WARN)
+            warnx "SC-7-boundary-config" "SC-7: Review boundary setting: $SC7_MSG in $SC7_CONFIG_NAME"
+            ;;
+          PASS)
+            passx "SC-7-boundary-config" "SC-7: Boundary setting OK: $SC7_MSG in $SC7_CONFIG_NAME"
+            ;;
+        esac
+      done
+    fi
+  else
+    skipx "SC-7-ssrf-policy" "SC-7: OpenClaw config not found, cannot check boundary settings"
+  fi
+fi
