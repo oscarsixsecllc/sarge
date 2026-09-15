@@ -1167,5 +1167,124 @@
     "why": "CM-12 requires identifying the location of information and the specific system components on which it is processed and stored. Knowing where data lives is prerequisite for backup, incident response, and access control.",
     "fix": "Compare the reported data locations against your backup schedule and access-control policies. Ensure each directory is covered.",
     "scope": "agent"
+  },
+  "SC-5-gateway-rate-limit": {
+    "family": "SC-5 \u2014 Denial-of-Service Protection",
+    "what": "Gateway auth rate limiting is not configured",
+    "expected": "gateway.auth.rateLimit.maxAttempts is set to a reasonable value (10-20)",
+    "why": "NIST 800-53 SC-5 requires protection against denial-of-service attacks. Without rate limiting on the gateway auth endpoint, an attacker can attempt unlimited authentication requests, consuming resources and potentially locking out legitimate users.",
+    "fix": "Set gateway.auth.rateLimit.maxAttempts in openclaw.json to a value between 10 and 20"
+  },
+  "SC-5-concurrency-limits": {
+    "family": "SC-5 \u2014 Denial-of-Service Protection",
+    "what": "Agent/subagent/cron concurrency limits are not configured",
+    "expected": "agents.defaults.maxConcurrent, subagents.maxConcurrent, and cron.maxConcurrentRuns are bounded",
+    "why": "Unbounded concurrency allows a single user or automated trigger to exhaust system resources (CPU, memory, API rate limits). NIST 800-53 SC-5 requires mechanisms to protect against resource exhaustion.",
+    "fix": "Set agents.defaults.maxConcurrent (recommended: 4), agents.defaults.subagents.maxConcurrent (recommended: 8), and cron.maxConcurrentRuns (recommended: 8) in openclaw.json"
+  },
+  "SC-5-ufw-rate-limit": {
+    "family": "SC-5 \u2014 Denial-of-Service Protection",
+    "what": "No UFW rate limit rule on gateway port",
+    "expected": "UFW LIMIT rule on the OpenClaw gateway port to throttle connection attempts",
+    "why": "Network-level rate limiting provides defense-in-depth against volumetric DoS attacks targeting the gateway port, independent of application-level controls.",
+    "fix": "sudo ufw limit 18790/tcp  # or your configured gateway port"
+  },
+  "SC-7-firewall-active": {
+    "family": "SC-7 \u2014 Boundary Protection",
+    "what": "Host firewall is not active",
+    "expected": "UFW (or equivalent host firewall) is active with a default-deny incoming policy",
+    "why": "NIST 800-53 SC-7 requires monitoring and controlling communications at the external and key internal boundaries. Without an active firewall, all ports are exposed to the network.",
+    "fix": "sudo ufw enable && sudo ufw default deny incoming"
+  },
+  "SC-7-default-deny": {
+    "family": "SC-7 \u2014 Boundary Protection",
+    "what": "Default incoming firewall policy is not deny/reject",
+    "expected": "UFW default incoming policy is deny or reject",
+    "why": "A default-allow policy means any new service that opens a port is immediately accessible from the network. Default-deny ensures only explicitly allowed traffic reaches the host.",
+    "fix": "sudo ufw default deny incoming"
+  },
+  "SC-7-unexpected-ports": {
+    "family": "SC-7 \u2014 Boundary Protection",
+    "what": "Unexpected externally-listening ports detected",
+    "expected": "Only expected ports (SSH, OpenClaw gateway) are listening on external interfaces",
+    "why": "Each open port is potential attack surface. NIST 800-53 SC-7 requires controlling which services are accessible. Unexpected ports may indicate unauthorized services or misconfigurations.",
+    "fix": "Identify the service on each unexpected port (ss -tlnp) and either close it or add it to SARGE_EXPECTED_PORTS"
+  },
+  "SC-7-ssrf-policy": {
+    "family": "SC-7 \u2014 Boundary Protection",
+    "what": "OpenClaw SSRF policy allows private network access",
+    "expected": "browser.ssrfPolicy.dangerouslyAllowPrivateNetwork is false",
+    "why": "Allowing the agent browser to access private network addresses (RFC 1918, localhost) creates a server-side request forgery vector. An agent could probe internal services, read cloud metadata endpoints, or pivot to other hosts on the LAN.",
+    "fix": "Set browser.ssrfPolicy.dangerouslyAllowPrivateNetwork to false in openclaw.json"
+  },
+  "SC-7-boundary-config": {
+    "family": "SC-7 \u2014 Boundary Protection",
+    "what": "OpenClaw boundary configuration needs review",
+    "expected": "mDNS mode is off/minimal, hooks are disabled unless required, web interface is disabled unless required",
+    "why": "Each enabled network service (mDNS discovery, webhook hooks, web interface) expands the agent's boundary surface. NIST 800-53 SC-7 requires controlling communications at boundaries.",
+    "fix": "Review and restrict: discovery.mdns.mode=minimal, hooks.enabled=false (unless needed), web.enabled=false (unless needed)"
+  },
+  "SI-4-auditd-active": {
+    "family": "SI-4 \u2014 Information System Monitoring",
+    "what": "auditd is not running",
+    "expected": "auditd is installed and running to capture system-level security events",
+    "why": "NIST 800-53 SI-4 requires monitoring the information system to detect attacks, indicators of potential attacks, and unauthorized connections. auditd is the primary Linux audit framework for tracking security-relevant events.",
+    "fix": "sudo apt install auditd && sudo systemctl enable --now auditd"
+  },
+  "SI-4-auth-audit-rules": {
+    "family": "SI-4 \u2014 Information System Monitoring",
+    "what": "No audit rules covering authentication events",
+    "expected": "Audit rules watch auth-related files (shadow, pam, faillog, auth.log)",
+    "why": "Without audit rules for authentication events, login attempts (successful and failed), password changes, and privilege escalations go unmonitored. This is a blind spot for incident detection and forensics.",
+    "fix": "Add audit rules: -w /etc/shadow -p wa -k shadow_changes && -w /var/log/auth.log -p wa -k auth_log && -w /etc/pam.d/ -p wa -k pam_changes"
+  },
+  "SI-4-openclaw-audit-rules": {
+    "family": "SI-4 \u2014 Information System Monitoring",
+    "what": "No audit rules for OpenClaw/Claude paths",
+    "expected": "Audit rules watch OpenClaw configuration and activity directories",
+    "why": "Agent configuration changes (permissions, tool grants, model routing) should be tracked for change detection and incident forensics. Without these rules, an attacker who modifies agent config leaves no audit trail.",
+    "fix": "Add audit rule: -w /home/<user>/.openclaw -p wa -k openclaw_config"
+  },
+  "SI-4-log-analysis": {
+    "family": "SI-4 \u2014 Information System Monitoring",
+    "what": "No log analysis tool installed",
+    "expected": "A log analysis tool (logwatch, logcheck, or syslog-ng) is installed for periodic log review",
+    "why": "Raw logs are only useful if someone reviews them. Log analysis tools summarize and highlight anomalies, turning raw data into actionable intelligence. NIST 800-53 SI-4 requires analysis of monitoring data.",
+    "fix": "sudo apt install logwatch  # or logcheck for real-time alerting"
+  },
+  "SI-4-oc-diagnostics": {
+    "family": "SI-4 \u2014 Information System Monitoring",
+    "what": "OpenClaw monitoring or audit settings need attention",
+    "expected": "diagnostics.enabled=true, audit.enabled=true, cron.failureAlert.enabled=true, minimal audit suppressions",
+    "why": "OpenClaw's built-in diagnostics and audit trail provide application-level monitoring that complements OS-level auditd. Disabling them or adding broad suppressions creates monitoring blind spots.",
+    "fix": "Enable diagnostics, audit, and cron failure alerts in openclaw.json. Review security.audit.suppressions for overly broad rules."
+  },
+  "SI-6-services-active": {
+    "family": "SI-6 \u2014 Security Function Verification",
+    "what": "One or more security services have stopped running",
+    "expected": "All security services (auditd, UFW, fail2ban, sshd) remain active",
+    "why": "NIST 800-53 SI-6 requires the system to verify the correct operation of security functions. A stopped security service (firewall, intrusion prevention, audit daemon) leaves the system unprotected even if it was once properly configured.",
+    "fix": "Restart the stopped service(s) and investigate why they stopped. Check journalctl for crash logs or OOM kills."
+  },
+  "SI-6-drift-cron": {
+    "family": "SI-6 \u2014 Security Function Verification",
+    "what": "No drift detection cron job configured",
+    "expected": "drift-cron.sh is scheduled in crontab for periodic security posture verification",
+    "why": "One-time security configuration drifts over time as packages update, services restart, or configs are manually changed. Periodic automated verification catches drift before it becomes an exploitable gap.",
+    "fix": "Add to crontab: 0 */6 * * * /path/to/sarge/drift/drift-cron.sh  # run every 6 hours"
+  },
+  "SI-16-aslr": {
+    "family": "SI-16 \u2014 Memory Protection",
+    "what": "ASLR is not fully enabled",
+    "expected": "kernel.randomize_va_space=2 (full ASLR)",
+    "why": "Address Space Layout Randomization makes exploitation of memory corruption vulnerabilities significantly harder by randomizing the memory layout of processes. Partial or disabled ASLR leaves predictable memory layouts that attackers can target.",
+    "fix": "sudo sysctl -w kernel.randomize_va_space=2 && echo 'kernel.randomize_va_space=2' | sudo tee -a /etc/sysctl.d/99-aslr.conf"
+  },
+  "SI-7-package-signing": {
+    "family": "SI-7 \u2014 Software & Information Integrity",
+    "what": "APT package signature verification is not enforced",
+    "expected": "APT::Get::AllowUnauthenticated is unset or false, trusted GPG keys are present",
+    "why": "Without signature verification, tampered or malicious packages could be installed during system updates. NIST 800-53 SI-7 requires integrity verification of software and information.",
+    "fix": "Ensure APT::Get::AllowUnauthenticated is not set to true. Verify trusted keys exist in /etc/apt/trusted.gpg.d/"
   }
 }

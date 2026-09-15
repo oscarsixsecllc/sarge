@@ -916,6 +916,21 @@
       "remediation": "Enable diagnostics, audit, and cron.failureAlert. Enable auditd on the host. Review security.audit.suppressions for blind spots."
     },
     {
+      "id": "SI-6",
+      "family": "SI",
+      "name": "Security Function Verification",
+      "status": "full",
+      "openclaw_settings": [],
+      "os_checks": [
+        "systemctl is-active auditd",
+        "ufw status",
+        "systemctl is-active fail2ban",
+        "systemctl is-active sshd",
+        "crontab -l | grep drift"
+      ],
+      "remediation": "Verify all security services (auditd, UFW, fail2ban, sshd) remain active. Configure drift-cron.sh in crontab for periodic automated verification."
+    },
+    {
       "id": "SI-7",
       "family": "SI",
       "name": "Software, Firmware, and Information Integrity",
