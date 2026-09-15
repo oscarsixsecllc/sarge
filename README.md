@@ -2,7 +2,7 @@
 
 > **Focus Forward. We've Got Your Six.** — Oscar Six Security LLC
 
-[![Version](https://img.shields.io/badge/version-v0.11.0-green)](https://github.com/oscarsixsecllc/sarge/releases)
+[![Version](https://img.shields.io/badge/version-v0.12.0-green)](https://github.com/oscarsixsecllc/sarge/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20macOS%20%7C%20Windows-orange)](docs/quickstart.md)
 
@@ -14,7 +14,7 @@ Sarge is an open source NIST 800-53 Rev 5 hardening standard, gap analysis tool,
 
 ## What Sarge Does
 
-- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **68 controls across 12 NIST families + AS agent-safety overlay** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x–2026.8.x (tested against 2026.8.2). See [NIST 800-53 Rev 5 Control Coverage](#nist-800-53-rev-5-control-coverage) below for the full per-control breakdown.
+- 📋 **Gap Analysis** — Scans your OpenClaw instance and underlying OS against a documented 800-53 baseline. Produces a structured report: control ID, status (pass/warn/fail), current value, required value, and remediation steps. **69 controls across 12 NIST families + AS agent-safety overlay** on a standard Ubuntu 24.04 host with OpenClaw 2026.7.x–2026.8.x (tested against 2026.8.2). See [NIST 800-53 Rev 5 Control Coverage](#nist-800-53-rev-5-control-coverage) below for the full per-control breakdown.
 - 🔒 **Hardening Scripts** — Idempotent, auditable bash scripts for UFW, auditd, PAM (faillock + pwquality), fail2ban, systemd service hardening, and file permissions.
 - 📸 **Drift Detection** — Compares current system state against a captured baseline. Any drift generates a notification via your OpenClaw-configured channel.
 - 🗺️ **Control Mapping** — Every OpenClaw setting and OS-level recommendation mapped to its 800-53 control ID, in both JSON and Markdown.
@@ -170,11 +170,12 @@ Sarge's baseline (`baseline/controls.json`) documents 68 individual NIST 800-53 
 - **SC-28 — Protection of Information at Rest** (full) — Checks `memory.encryption`, `secrets.providers`, `logging.redactSensitive`, `diagnostics.otel.captureContent.enabled`, `diagnostics.cacheTrace.enabled`, `env`, `media.preserveFilenames`, `media.ttlHours`; OS: `stat ~/.openclaw/secrets/`, `ls -la ~/.openclaw/`. Remediation: secrets directory must be 700; all secret files must be 600; owner must be the service account only.
 - **SC-39 — Process Isolation** (full) — OS: `cat /proc/PID/cgroup`, `readlink /proc/PID/ns/{pid,net,mnt}`. Remediation: run OpenClaw in a container or systemd slice with resource limits; use network and PID namespaces to isolate the agent.
 
-### SI — System and Information Integrity (7 controls)
+### SI — System and Information Integrity (8 controls)
 
 - **SI-2 — Flaw Remediation** (partial) — OS: `apt list --upgradable`, `unattended-upgrades --dry-run`. Remediation: enable unattended-upgrades for security patches; review and apply pending updates.
 - **SI-3 — Malicious Code Protection** (partial) — OS: `which clamav`, `systemctl status clamav-daemon`. Remediation: install and configure ClamAV or equivalent; schedule regular scans.
 - **SI-4 — Information System Monitoring** (full) — Checks `diagnostics.enabled`, `audit.enabled`, `cron.failureAlert.enabled`, `security.audit.suppressions`; OS: `systemctl status auditd`. Remediation: enable diagnostics, audit, and `cron.failureAlert`; enable auditd on the host; review `security.audit.suppressions` for blind spots.
+- **SI-6 — Security Function Verification** (full) — OS: `systemctl is-active auditd`, `ufw status`, `systemctl is-active fail2ban`, `systemctl is-active sshd`, `crontab -l | grep drift`. Remediation: verify all security services (auditd, UFW, fail2ban, sshd) remain active; configure `drift-cron.sh` in crontab for periodic automated verification.
 - **SI-7 — Software, Firmware, and Information Integrity** (partial) — OS: `apt-config dump | grep -i AllowUnauthenticated`, `ls /etc/apt/trusted.gpg.d/`. Remediation: ensure `APT::Get::AllowUnauthenticated` is unset or false; verify apt repository GPG keys are configured under `/etc/apt/trusted.gpg.d/`.
 - **SI-12 — Information Management and Retention** (full) — Checks `agents.defaults.compaction.mode`, `agents.defaults.compaction.memoryFlush.enabled`, `agents.defaults.compaction.truncateAfterCompaction`, `transcripts.enabled`, `transcripts.maxUtterances`, `media.ttlHours`. Remediation: set `compaction.mode` to `safeguard`, enable `memoryFlush` and `truncateAfterCompaction`, review `transcripts.maxUtterances` and `media.ttlHours` retention bounds.
 - **SI-16 — Memory Protection** (full) — OS: `cat /proc/sys/kernel/randomize_va_space`. Remediation: set `kernel.randomize_va_space=2` for full ASLR — `sudo sysctl -w kernel.randomize_va_space=2`.
@@ -279,7 +280,7 @@ Per-file secrets checks (AC-3), per-service CM-7 checks, and per-class pwquality
 > 
 > **SC (partial):** Many System & Communications Protection controls require network infrastructure decisions that vary by deployment — full boundary protection architecture, PKI certificate lifecycle, and cryptographic key management go beyond what a single-VM OpenClaw deployment can meaningfully self-assess. Sarge covers the controls that are universally applicable: transmission confidentiality (SC-8) and protection of data at rest (SC-28). Expanded SC coverage is tracked in [#1](https://github.com/oscarsixsecllc/sarge/issues/1).
 >
-> **SI (partial):** Full System & Information Integrity coverage (particularly SI-4 System Monitoring) requires a SIEM or centralized log analysis setup — a significant dependency that would narrow Sarge's applicability. Sarge covers what every deployment can implement: flaw remediation (SI-2), malware protection (SI-3), and script integrity verification (SI-7). Expanded SI coverage is tracked in [#2](https://github.com/oscarsixsecllc/sarge/issues/2).
+> **SI (partial):** Full System & Information Integrity coverage (particularly advanced SI-4 System Monitoring) requires a SIEM or centralized log analysis setup — a significant dependency that would narrow Sarge's applicability. Sarge covers what every deployment can implement: flaw remediation (SI-2), malware protection (SI-3), system monitoring basics (SI-4), security function verification (SI-6), script integrity verification (SI-7), memory protection (SI-16), and fail-safe procedures (SI-17).
 
 ---
 
