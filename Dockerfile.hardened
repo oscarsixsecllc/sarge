@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Install Node.js 22 (required by OpenClaw)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y nodejs && \
     node --version && npm --version
 
