@@ -22,6 +22,9 @@ jobs:
       - name: Run catalog-platform-field
         run: bash tests/integration/catalog-platform-field.sh
 
+      - name: Run readme-control-counts
+        run: bash tests/integration/readme-control-counts.sh
+
   # ── Docker-based integration tests ──────────────────────────────────
   integration-tests:
     name: Integration tests (Docker)

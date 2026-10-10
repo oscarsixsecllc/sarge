@@ -82,7 +82,7 @@ In host-only mode, agent-scoped findings are excluded entirely (not even SKIP �
 
 ## NIST 800-53 Rev 5 Control Coverage
 
-Sarge's baseline (`baseline/controls.json`) documents 68 individual NIST 800-53 Rev 5 controls across 12 families. Each control lists the exact OpenClaw settings and OS-level checks Sarge inspects, plus remediation guidance.
+Sarge's baseline (`baseline/controls.json`) documents 69 individual NIST 800-53 Rev 5 controls across 12 families. Each control lists the exact OpenClaw settings and OS-level checks Sarge inspects, plus remediation guidance.
 
 ### Summary by family
 
@@ -91,7 +91,7 @@ Sarge's baseline (`baseline/controls.json`) documents 68 individual NIST 800-53 
 - **CM — Configuration Management** — 9 controls — Partial (7 full, 2 partial)
 - **IA — Identification and Authentication** — 7 controls — Full
 - **SC — System and Communications Protection** — 11 controls — Full
-- **SI — System and Information Integrity** — 7 controls — Partial (4 full, 3 partial)
+- **SI — System and Information Integrity** — 8 controls — Partial (5 full, 3 partial)
 - **CP — Contingency Planning** — 2 controls — Partial (1 full, 1 partial)
 - **CA — Assessment, Authorization, and Monitoring** — 2 controls — Partial (1 full, 1 partial)
 - **SA — System and Services Acquisition** — 2 controls — Partial (both partial)
