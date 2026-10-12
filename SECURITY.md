@@ -24,8 +24,8 @@ Sarge is a security tool. We hold ourselves to a high standard: any vulnerabilit
 
 Report vulnerabilities via:
 
-1. **GitHub Security Advisories** (preferred): [oscarsixsecurity/sarge/security/advisories](https://github.com/oscarsixsecurity/sarge/security/advisories)
-2. **Email**: security@oscarsixsecurity.com
+1. **GitHub Security Advisories** (preferred): [oscarsixsecllc/sarge/security/advisories](https://github.com/oscarsixsecllc/sarge/security/advisories)
+2. **Email**: security@oscarsixsecurityllc.com
 3. **Discord DM**: @rhinders on the Oscar Six Security Discord (for urgent issues)
 
 ### What to Include
